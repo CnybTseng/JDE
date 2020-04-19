@@ -26,36 +26,36 @@ def parse_args():
         help='network input size, default=320x576')
     return parser.parse_args()
 
-def xywh2tlbr(boxes):
+def xywh2ltrb(boxes):
     '''转换建议框的数据格式
     
     Args:
         boxes (torch.Tensor): [x,y,w,h]格式的建议框
     Returns:
-        tlbr (torch.Tensor): [t,l,b,r]格式的建议框
+        ltrb (torch.Tensor): [l,t,r,b]格式的建议框
     '''
-    tlbr = torch.zeros_like(boxes)
-    tlbr[:,0] = boxes[:,0] - boxes[:,2]/2
-    tlbr[:,1] = boxes[:,1] - boxes[:,3]/2
-    tlbr[:,2] = boxes[:,0] + boxes[:,2]/2
-    tlbr[:,3] = boxes[:,1] + boxes[:,3]/2
-    return tlbr
+    ltrb = torch.zeros_like(boxes)
+    ltrb[:,0] = boxes[:,0] - boxes[:,2]/2
+    ltrb[:,1] = boxes[:,1] - boxes[:,3]/2
+    ltrb[:,2] = boxes[:,0] + boxes[:,2]/2
+    ltrb[:,3] = boxes[:,1] + boxes[:,3]/2
+    return ltrb
 
-def tlbr2xyah(tlbr):
+def ltrb2xyah(ltrb):
     '''转换建议框的数据格式
     
     Args:
-        tlbr (numpy.ndarray): [t,l,b,r]格式的建议框
+        ltrb (numpy.ndarray): [l,t,r,b]格式的建议框
     Returns:
         xyah (numpy.ndarray): [x,y,a,h]格式的建议框
     '''
-    dim = len(tlbr.shape)
-    tlbr = tlbr.reshape(-1, 4)
-    xyah = np.zeros_like(tlbr)
-    xyah[:,0] = (tlbr[:,1] + tlbr[:,3]) / 2
-    xyah[:,1] = (tlbr[:,0] + tlbr[:,2]) / 2
-    xyah[:,3] = (tlbr[:,2] - tlbr[:,0])
-    xyah[:,2] = (tlbr[:,3] - tlbr[:,1]) / xyah[:,3]
+    dim = len(ltrb.shape)
+    ltrb = ltrb.reshape(-1, 4)
+    xyah = np.zeros_like(ltrb)
+    xyah[:,0] = (ltrb[:,0] + ltrb[:,2]) / 2
+    xyah[:,1] = (ltrb[:,1] + ltrb[:,3]) / 2
+    xyah[:,3] = (ltrb[:,3] - ltrb[:,1])
+    xyah[:,2] = (ltrb[:,2] - ltrb[:,0]) / xyah[:,3]
     if dim == 1:
         xyah = xyah.reshape(-1)
     return xyah
@@ -78,45 +78,68 @@ def nonmax_suppression(dets, score_thresh=0.5, iou_thresh=0.4):
         det = det[keep]
         if not det.size(0):
             continue
-        det[:, :4] = xywh2tlbr(det[:, :4])
+        det[:, :4] = xywh2ltrb(det[:, :4])
         keep = nms(det[:, :4], det[:, 4], iou_thresh)
         det = det[keep]
         nms_dets[i] = det
     return nms_dets
 
-def tlbr_net2img(boxes, net_size, img_size):
+def ltrb_net2img(boxes, net_size, img_size):
     '''将神经网络坐标系下的建议框投影到图像坐标系下
     
     Args:
-        boxes (torch.Tensor): 神经网络坐标系下[t, l, b, r]格式的建议框
+        boxes (torch.Tensor): 神经网络坐标系下[l, t, r, b]格式的建议框
         net_size (tuple of int): 神经网络输入大小, net_size=(height, width)
         img_size (tuple of int): 图像大小, img_size=(height, width)
     Returns:
-        boxes (torch.Tensor): 图像坐标系下[t, l, b, r]格式的建议框
+        boxes (torch.Tensor): 图像坐标系下[l, t, r, b]格式的建议框
     '''
     net_size = np.array(net_size)
     img_size = np.array(img_size)
-    s = (img_size / net_size).max()
-    nnet_size = (s * net_size).round()
-    dy, dx = (nnet_size - img_size) // 2
-    boxes = (s * boxes).round()
-    boxes[:, [0,2]] -= dy
-    boxes[:, [1,3]] -= dx
+    s = (net_size / img_size).min()
+    simg_size = s * img_size
+    dy, dx = (net_size - simg_size) / 2
+    boxes[:, [0,2]] -= dx
+    boxes[:, [1,3]] -= dy
+    boxes /= s
+    boxes = torch.clamp(boxes, min=0)
     return boxes
 
 def overlap(dets, im):
     '''叠加检测结果到图像上
+    
     Args:
         dets (torch.Tensor): 含检测结果的二维数组, dets[:]=
-            [t,l,b,r,objecness,class,embedding]
+            [l,t,r,b,objecness,class,embedding]
         im (numpy.ndarray): BGR格式图像
     Returns:
         im (numpy,ndarray): BGR格式图像
     '''
     for det in dets:
-        t, l, b, r = det[:4]
+        l, t, r, b = det[:4].round().int().numpy().tolist()
         color = np.random.randint(0, 256, size=(3,)).tolist()
-        cv2.rectangle(im, (t, l), (b, r), color, 2)
+        cv2.rectangle(im, (l, t), (r, b), color, 2)
+    return im
+
+def overlap_trajectory(trajectories, im):
+    '''叠加跟踪轨迹到图像上
+    
+    Args:
+        trajectories (list of Trajectory): 跟踪的轨迹列表
+        im (numpy.ndarray): BGR格式图像
+    Returns:
+        im (numpy.ndarray): BGR格式图像
+    '''
+    for trajectory in trajectories:
+        np.random.seed(trajectory.id)
+        color = np.random.randint(0, 256, size=(3,)).tolist()
+        l, t, r, b = trajectory.ltrb.round().astype(np.int32).tolist()
+        cv2.rectangle(im, (l, t), (r, b), color, 2)
+        text = '{}'.format(trajectory.id)
+        text_size, baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, 1)
+        x = min(max(l, 0), im.shape[1] - text_size[0] - 1)
+        y = min(max(b - baseline, text_size[1]), im.shape[0] - baseline - 1)
+        cv2.putText(im, text, (x, y), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, color, thickness=1)
     return im
 
 class TrajectoryState(IntEnum):
@@ -129,10 +152,10 @@ class Trajectory(kalman.KalmanFilter):
     '''轨迹
     '''
     count = 0
-    def __init__(self, tlbr, score, embedding):
+    def __init__(self, ltrb, score, embedding):
         super(Trajectory, self).__init__()
-        self.tlbr = tlbr
-        self.xyah = tlbr2xyah(tlbr)
+        self.ltrb = ltrb
+        self.xyah = ltrb2xyah(ltrb)
         self.score = score
         self.smooth_embedding = None
         self.id = 0
@@ -150,7 +173,7 @@ class Trajectory(kalman.KalmanFilter):
         else:
             self.smooth_embedding = self.eta * self.smooth_embedding + \
                 (1 - self.eta) * self.current_embedding
-        self.smooth_embedding = self.smooth_embedding / np.linalg.norm(self.smooth_embedding)
+        self.smooth_embedding /= np.linalg.norm(self.smooth_embedding)
     
     @staticmethod
     def next_id():
@@ -164,7 +187,9 @@ class Trajectory(kalman.KalmanFilter):
     
     def update(self, trajectory, timestamp, update_embedding=True):
         self.timestamp = timestamp
-        self.length += 1        
+        self.length += 1
+        self.ltrb = trajectory.ltrb
+        self.xyah = trajectory.xyah
         super().correct(trajectory.xyah)
         self.state = TrajectoryState.Tracked
         self.is_activated = True
@@ -249,7 +274,7 @@ def embedding_distance(A, B):
     costs = np.zeros((len(A), len(B)))
     if costs.size == 0:
         return costs
-    XA = np.asarray([trajectory.current_embedding for trajectory in A])
+    XA = np.asarray([trajectory.smooth_embedding for trajectory in A])
     XB = np.asarray([trajectory.current_embedding for trajectory in B])
     costs = np.maximum(0, cdist(XA, XB))
     return costs
@@ -263,8 +288,8 @@ def iou_distance(A, B):
     Returns:
         costs (numpy.ndarray): 代价矩阵
     '''
-    BA = [a.tlbr for a in A]
-    BB = [b.tlbr for b in B]
+    BA = [a.ltrb for a in A]
+    BB = [b.ltrb for b in B]
     ious = np.zeros((len(A), len(B)), dtype=np.float)
     if ious.size == 0:
         return ious   
@@ -315,6 +340,7 @@ def fuse_motion(trajectory_pool, candidates, dists, lamb=0.98):
         gdist = trajectory.gating_distance(measurements)
         dists[i, gdist > gate_thresh] = np.inf
         dists[i] = lamb * dists[i] + (1 - lamb) * gdist
+    return dists
 
 def linear_assignment(cost, cost_limit):
     '''线性分配
@@ -505,10 +531,12 @@ def main(args):
         outputs = decoder(outputs)
         print('{} {} {} {}'.format(path, im.shape, lb_im.shape, outputs.size()), end=' ')
         outputs =  nonmax_suppression(outputs)[0]
-        print('{}'.format(outputs.size()))
-        outputs[:, :4] = tlbr_net2img(outputs[:, :4], (h,w), im.shape[:2])
-        tracker.update(outputs.numpy())
-        result = overlap(outputs, im)
+        print('{}'.format(outputs.size()), end=' ')
+        outputs[:, :4] = ltrb_net2img(outputs[:, :4], (h,w), im.shape[:2])
+        trajectories = tracker.update(outputs.numpy())
+        print('{}'.format(len(trajectories)))
+        # result = overlap(outputs, im)
+        result = overlap_trajectory(trajectories, im)
         segments = re.split(r'[\\, /]', path)
         cv2.imwrite('result/{}'.format(segments[-1]), result)
 

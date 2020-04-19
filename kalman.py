@@ -1,4 +1,5 @@
 import cv2
+import scipy
 import numpy as np
 from scipy.spatial.distance import mahalanobis
 
@@ -56,6 +57,8 @@ class KalmanFilter(object):
             1e-5,
             10 * self.std_weight_velocity * measurement[3]
         ])).astype(np.float32)
+        self.kf.statePre = self.kf.statePost
+        self.kf.errorCovPre = self.kf.errorCovPost
     
     def predict(self, *args, **kwargs):
         '''预测
@@ -77,7 +80,9 @@ class KalmanFilter(object):
         return self.kf.predict(*args, **kwargs)
     
     def correct(self, measurement):
-        '''更新
+        '''更新, 第二帧的self.tracked_trajectories的is_activated都为False,
+            意味着都没有加入trajectory_pool, 也就没有predict, 导致statePre,
+            errorCovPre都没有更新, 全是0
         '''
         
         # 计算测量噪声协方差
@@ -118,15 +123,15 @@ class KalmanFilter(object):
             dists (numpy.ndarray): 测量和状态分布之间的门限距离
         '''
         mean, covariance = self.project()
-        # covariance = np.linalg.inv(covariance)
-        # dists = [mahalanobis(x, mean, covariance) for x in measurement]
-        # dists = np.square(dists)
-        d = measurement - mean
-        cholesky_factor = np.linalg.cholesky(covariance)
-        z = scipy.linalg.solve_triangular(
-                cholesky_factor, d.T, lower=True, check_finite=False,
-                overwrite_b=True)
-        dists = np.sum(z * z, axis=0)
+        covariance = np.linalg.inv(covariance)
+        dists = [mahalanobis(x, mean, covariance) for x in measurement]
+        dists = np.square(dists)
+        # d = measurement - mean
+        # cholesky_factor = np.linalg.cholesky(covariance)
+        # z = scipy.linalg.solve_triangular(
+        #         cholesky_factor, d.T, lower=True, check_finite=False,
+        #         overwrite_b=True)
+        # dists = np.sum(z * z, axis=0)
         return dists
 
 if __name__ == '__main__':

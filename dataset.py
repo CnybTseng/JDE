@@ -3,7 +3,7 @@ import cv2
 import glob
 import numpy as np
 
-def letterbox_image(im, insize=(320,576,3), border=127.5):
+def letterbox_image(im, insize=(320,576,3), border=128):
     '''生成letterbox图像
     
     Args:
@@ -21,11 +21,15 @@ def letterbox_image(im, insize=(320,576,3), border=127.5):
     s = min(insize[0] / h, insize[1] / w)
     nh = round(s * h)
     nw = round(s * w)
-    dx = int((insize[1] - nw) // 2)
-    dy = int((insize[0] - nh) // 2)
-    lb_im = np.full(insize, border, dtype=np.float32)
-    lb_im[dy:dy+nh, dx:dx+nw, :] = cv2.resize(im, (nw,nh), interpolation=
-        cv2.INTER_AREA).astype(np.float32)
+    dx = (insize[1] - nw) / 2
+    dy = (insize[0] - nh) / 2
+    left  = round(dx - 0.1)
+    right = round(dx + 0.1)
+    above = round(dy - 0.1)
+    below = round(dy + 0.1)
+    lb_im = np.full(insize, border, dtype=np.uint8)
+    lb_im[above:above+nh, left:left+nw, :] = cv2.resize(im, (nw,nh), interpolation=
+        cv2.INTER_AREA)
     return lb_im, s, dx, dy
 
 class ImagesLoader(object):
@@ -58,6 +62,7 @@ class ImagesLoader(object):
         im = cv2.imread(path)
         assert im is not None, 'cv2.imread{} fail'.format(path)
         lb_im, s, dx, dy = letterbox_image(im, insize=self.insize)
-        lb_im = np.ascontiguousarray(lb_im[...,::-1].transpose(2, 0, 1))
-        lb_im /= 255
+        lb_im = lb_im[...,::-1].transpose(2, 0, 1)
+        lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
+        lb_im /= 255.0
         return path, im, lb_im
