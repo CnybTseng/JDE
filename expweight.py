@@ -20,7 +20,7 @@ def main(args):
 
     weights = []
     for key, value in modules.items():
-        if not 'num_batches_tracked' in key and not 'yolo' in key and not 'classifier' in key:
+        if not 'num_batches_tracked' in key and not 'yolo' in key:
             weights.append(value)
             print(f"{key} {value.size()}")
     
@@ -47,6 +47,12 @@ def main(args):
             assert module.running_var.size() == weights[i].size()
             module.running_var.data = weights[i].data.clone()
             i += 1
+        elif isinstance(module, torch.nn.Linear):
+            assert module.weight.size() == weights[i].size()
+            module.weight.data = weights[i].data.clone()
+            i += 1
+            assert module.bias.size() == weights[i].size()
+            module.bias.data = weights[i].data.clone()
     
     torch.save(net.state_dict(), args.exported_model)
 

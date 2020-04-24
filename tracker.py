@@ -26,6 +26,15 @@ def parse_args():
         help='network input size, default=320x576')
     return parser.parse_args()
 
+def mkdir(path):
+    '''目录不存在, 则创建之
+    
+    Args：
+        path (str): 需要创建的目录
+    '''
+    if not os.path.exists(path):
+        os.makedirs(path)
+
 def xywh2ltrb(boxes):
     '''转换建议框的数据格式
     
@@ -321,8 +330,8 @@ def remove_duplicate_trajectories(A, B, thresh=0.15):
     B = [b for i,b in enumerate(B) if not i in DB]
     return A, B
 
-def fuse_motion(trajectory_pool, candidates, dists, lamb=0.98):
-    '''融合表观嵌入距离和分布测量距离
+def merge_mahalanobis_distance(trajectory_pool, candidates, dists, lamb=0.98):
+    '''融合表观嵌入距离和马氏距离
     
     Args:
         trajectory_pool (list of Trajectory): 轨迹池
@@ -412,9 +421,9 @@ class JDETracker(object):
         for trajectory in trajectory_pool:
             trajectory.predict()
         
-        # 根据表观嵌入关联候选轨迹和轨迹库
+        # 根据表观嵌入和马氏距离关联候选轨迹和池轨迹
         dists = embedding_distance(trajectory_pool, candidates)
-        dists = fuse_motion(trajectory_pool, candidates, dists)
+        dists = merge_mahalanobis_distance(trajectory_pool, candidates, dists)
         matches, mismatch_row, mismatch_col = linear_assignment(dists, cost_limit=0.7)
         
         activated_trajectories = []
@@ -431,7 +440,7 @@ class JDETracker(object):
                 pool_trajectory.reactivate(cand_trajectory, self.timestamp)
                 retrieved_trajectories.append(pool_trajectory)
         
-        # 根据IoU关联候选轨迹和轨迹库
+        # 根据IoU关联候选轨迹和轨迹池
         candidates = [candidates[i] for i in mismatch_col]
         # 轨迹池中一直跟踪到上一帧, 但当前帧没有匹配轨迹的那些轨迹
         mismatch_tracked_pool_trajectories = [trajectory_pool[i] \
@@ -506,6 +515,7 @@ def main(args):
     model.load_state_dict(torch.load(os.path.join(args.model), map_location='cpu'))
     model.eval()
 
+    mkdir('./result')
     if '320x576' in args.insize:
         anchors = ((6,16),   (8,23),    (11,32),   (16,45),
                    (21,64),  (30,90),   (43,128),  (60,180),
@@ -520,7 +530,7 @@ def main(args):
                    (128,384), (180,540), (256,640), (512,640))
 
     h, w = [int(s) for s in args.insize.split('x')]
-    decoder = yolov3.YOLOv3EvalDecoder((h,w), 1, anchors)
+    decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors)
     tracker = JDETracker()
     dataloader = dataset.ImagesLoader(args.img_path, (h,w,3))
     
@@ -539,6 +549,8 @@ def main(args):
         result = overlap_trajectory(trajectories, im)
         segments = re.split(r'[\\, /]', path)
         cv2.imwrite('result/{}'.format(segments[-1]), result)
+    
+    os.system('./bin/ffmpeg-4.2.2-amd64-static/ffmpeg -i result/%06d.jpg result.mp4')
 
 if __name__ == '__main__':
     args = parse_args()

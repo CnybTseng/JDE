@@ -111,7 +111,7 @@ class KalmanFilter(object):
         return mean, covariance
     
     def gating_distance(self, measurement, only_position=False, metric='maha'):
-        '''计算测量和状态分布之间的门限距离(Mahalanobis distance)
+        '''计算测量和状态分布之间的马氏距离(Mahalanobis distance)
             Please reference https://en.wikipedia.org/wiki/Mahalanobis_distance
         
         Args:
@@ -120,18 +120,12 @@ class KalmanFilter(object):
                 仅考虑建议框的中心坐标
             metric (str, optional): 距离度量方法
         Returns:
-            dists (numpy.ndarray): 测量和状态分布之间的门限距离
+            dists (numpy.ndarray): 测量和状态分布之间的马氏距离
         '''
         mean, covariance = self.project()
         covariance = np.linalg.inv(covariance)
         dists = [mahalanobis(x, mean, covariance) for x in measurement]
         dists = np.square(dists)
-        # d = measurement - mean
-        # cholesky_factor = np.linalg.cholesky(covariance)
-        # z = scipy.linalg.solve_triangular(
-        #         cholesky_factor, d.T, lower=True, check_finite=False,
-        #         overwrite_b=True)
-        # dists = np.sum(z * z, axis=0)
         return dists
 
 if __name__ == '__main__':

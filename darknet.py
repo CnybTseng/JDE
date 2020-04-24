@@ -49,7 +49,7 @@ class Route(torch.nn.Module):
         return torch.cat(tensors=tensors, dim=1)
        
 class DarkNet(torch.nn.Module):
-    def __init__(self, num_classes=1):
+    def __init__(self, num_classes=1, num_ids=0):
         super(DarkNet, self).__init__()
         self.num_classes = num_classes
         self.momentum = 0.01
@@ -150,6 +150,10 @@ class DarkNet(torch.nn.Module):
         self.route9 = Route()
         self.conv6 = torch.nn.Conv2d(in_channels=128, out_channels=self.embedding_channels, kernel_size=3, padding=1, bias=True)
         self.route10 = Route()
+
+        '''Shared identities classifier'''
+
+        self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
 
         self.__init_weights()
     
