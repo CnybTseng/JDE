@@ -48,3 +48,5 @@ if __name__ == '__main__':
     
     refer = torch.load(os.path.join(args.path, 'pred.pt'), map_location='cpu')
     print(f'the decoded output size is {decoded_outputs.size()}, correct?{torch.equal(decoded_outputs, refer)}')
+    print(f"bbox and class predictions are correct?{torch.equal(decoded_outputs[...,:6], refer[...,:6])}")
+    print(f"embedding max diff {torch.abs(decoded_outputs[...,6:] - refer[...,6:]).max()}")
