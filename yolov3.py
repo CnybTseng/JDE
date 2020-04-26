@@ -115,7 +115,8 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         classifier:
     '''
     def __init__(self, num_classes, anchors, num_idents, classifier=torch.nn.Sequential()):
-        super(YOLOv3Loss, self).__init__((608,1088), num_classes, anchors)
+        super(YOLOv3Loss, self).__init__((608,1088), num_classes, anchors,
+            embd_dim=512)
         self.num_idents = num_idents
         self.classifier = classifier                     # embedding mapping to class logits
         self.sb = nn.Parameter(-4.85 * torch.ones(1))    # location task uncertainty
@@ -129,8 +130,10 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         self.bkgd_thresh = 0.4  # background confidence threshold
         self.embd_scale  = math.sqrt(2) * math.log(self.num_idents) \
             if self.num_idents > 1 else 1
+        self.BoolTensor = torch.cuda.BoolTensor if \
+            torch.cuda.is_available() else torch.BoolTensor
         
-    def forward(xs, targets, in_size):
+    def forward(self, xs, targets, in_size):
         '''YOLOv3Loss layer forward propagation
         
         Args:
@@ -145,21 +148,21 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
 
         # decode backbone outputs
         outputs = super().forward(xs)
-        pbboxes = [output[0] for output in outputs]                                     # n*a*h*w*4
+        pbboxes = [output[1][..., : 4] for output in outputs]                           # n*a*h*w*4
         pclasss = [output[1][..., 4 : 5 + self.num_classes] for output in outputs]      # n*a*h*w*2
         pclasss = [pclass.permute(0, 4, 1, 2, 3).contiguous() for pclass in pclasss]    # n*2*a*h*w
         pembeds = [output[2] for output in outputs]                                     # n*h*w*512
         
         # build targets for three heads
         batch_size = xs[0].size(0)
-        gsizes = [list(output[1].shape[1:3]) for output in outputs]
+        gsizes = [list(output[1].shape[2:4]) for output in outputs]
         tbboxes, tclasss, tidents = self._build_targets(batch_size, targets, gsizes)
         
         # select predictions and truths based on object mask
         masks = [tc > 0 for tc in tclasss]                                          # n*a*h*w
         obj_masks = [mask.max(1)[0] for mask in masks]                              # n*h*w
-        tidents = [tident.max(1)[0] for tident in tidents]                          # n*h*w*1
-        tidents = [tident[m].squeeze() for tident, m in zip(tidents, obj_masks)]    # x
+        tidents = [tident.max(1)[0] for tident in tidents]                          # n*h*w
+        tidents = [tident[m] for tident, m in zip(tidents, obj_masks)]              # x
         pembeds = [pembed[m] for pembed, m in zip(pembeds, obj_masks)]              # x*512
         pembeds = [self.embd_scale * pembed for pembed in pembeds]                  # x*512
         
@@ -171,15 +174,15 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         lclasss = [self.clas_lossf(pc, tc) for pc, tc in zip(pclasss, tclasss)]
         lidents = [self.FloatTensor([0])] * len(pembeds)
         for i, (pembed, tident) in enumerate(zip(pembeds, tidents)):
-            if pembed.size > 0:
+            if pembed.size(0) > 0:
                 pident = self.classifier(pembed).contiguous()                       # x*num_idents
                 lidents[i] = self.iden_lossf(pident, tident)
         
         # total loss
         loss = self.FloatTensor([0])
         for lb, lc, li in zip(lbboxes, lclasss, lidents):
-            loss += [(torch.exp(-self.sb) * lb + torch.exp(-self.sc) * lc + \
-                torch.exp(self.si) * li + self.sb + self.sc + self.si) * 0.5]
+            loss += (torch.exp(-self.sb) * lb + torch.exp(-self.sc) * lc + \
+                torch.exp(self.si) * li + self.sb + self.sc + self.si) * 0.5
         
         # just for log
         lbboxes = [lb.item() for lb in lbboxes]
@@ -204,12 +207,12 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         a = self.anchor_masks.size(1)        
         tbboxes = [self.FloatTensor(n, a, h, w, 4).fill_(0) for h, w in gsizes]
         tclasss = [self.LongTensor(n, a, h, w).fill_(0) for h, w in gsizes]
-        tidents = [self.LongTensor(n, a, h, w, 1).fill_(-1) for h, w in gsizes]
+        tidents = [self.LongTensor(n, a, h, w).fill_(-1) for h, w in gsizes]
         if targets.size == 0:
             return tbboxes, tclasss, tidents
 
         batch, identifier, xywh = targets[:, 0].long(), targets[:, 2].long(), targets[:, 3:]
-        for amask, (h, w) in zip(self.anchor_masks, gsizes):
+        for layer, (amask, (h, w)) in enumerate(zip(self.anchor_masks, gsizes)):
             # ground truth boundding boxes
             xywh = targets[:, 3:] * self.FloatTensor([w, h, w, h])
             xywh[:, 0] = torch.clamp(xywh[:, 0], min=0, max=w-1)
@@ -218,20 +221,29 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
             # IOU between anchor boxes and ground truths
             anchors = self.anchors[amask, :] / (self.in_size[0] / h)                # a*2
             anchor_boxes = self._make_anchor_boxes(h, w, anchors).view(-1, 4)       # (a*h*w)*4
-            ious = [self._xywh_iou(anchor_boxes, xywh[batch==i]) for i in range(n)] # (a*h*w)*ti         
-            vis = [iou.max(1) for iou in ious]
+            ious = [self._xywh_iou(anchor_boxes, xywh[batch==i]) for i in range(n)] # (a*h*w)*ti            
+            vis = [self._iou_max(iou) for iou in ious]                              # (a*h*w)
             values  = torch.stack([vi[0].view(a, h, w) for vi in vis])              # n*a*h*w
             indices = torch.stack([vi[1].view(a, h, w) for vi in vis])              # n*a*h*w
             
-            # selecting and ignoring masks
+            # foreground and background selecting and ignoring masks
             keep_iden = values > self.iden_thresh                                   # n*a*h*w
             keep_frgn = values > self.frgd_thresh
             keep_bkgn = values < self.bkgd_thresh
-            ignore = values > self.bkgd_thresh && values < self.frgd_thresh
+            ignore    = (values > self.bkgd_thresh) & (values < self.frgd_thresh)
             
-            tclasss[keep_frgn] = 1
-            tclasss[keep_bkgn] = 0
-            tclasss[ignore] = -1
+            # set object confidence truths
+            tclasss[layer][keep_frgn] =  1
+            tclasss[layer][keep_bkgn] =  0
+            tclasss[layer][ignore]    = -1
+
+            # every image has different number of matched boxes and identifiers
+            for i in range(n):
+                idens = identifier[batch==i][indices[i][keep_iden[i]]]
+                tidents[layer][i][keep_iden[i]] = idens
+                tb = xywh[batch==i][indices[i][keep_frgn[i]]]                       # ti*4
+                ab = anchor_boxes.view(a, h, w, 4)[keep_frgn[i]]                    # ti*4
+                tbboxes[layer][i][keep_frgn[i]] = self._encode_bbox(tb, ab)
 
         return tbboxes, tclasss, tidents
     
@@ -267,19 +279,47 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         t2, l2 = B[:, 1] - B[:, 3] / 2, B[:, 0] - B[:, 2] / 2   # n
         b2, r2 = B[:, 1] + B[:, 3] / 2, B[:, 0] + B[:, 2] / 2   # n
         
-        t, l = torch.max(t1.squeeze(1), t2), torch.max(l1.squeeze(1), l2)   # m*n
-        b, r = torch.min(b1.squeeze(1), b2), torch.min(r1.squeeze(1), r2)   # m*n
-        w, h = torch.max(r - l, 0), torch.max(b - t, 0)
+        t, l = torch.max(t1.unsqueeze(1), t2), torch.max(l1.unsqueeze(1), l2)   # m*n
+        b, r = torch.min(b1.unsqueeze(1), b2), torch.min(r1.unsqueeze(1), r2)   # m*n
+        w, h = torch.clamp(r - l, min=0), torch.clamp(b - t, min=0)
         
         inter = w * h
-        area1 = A[:, 2] * A[:, 3].view(-1, 1).expand(m, n)
-        area2 = B[:, 2] * B[:, 3].view(1, -1).expand(m, n)
+        area1 = (A[:, 2] * A[:, 3]).view(-1, 1).expand(m, n)
+        area2 = (B[:, 2] * B[:, 3]).view(1, -1).expand(m, n)
         
         return inter / (area1 + area2 - inter + eps)
+    
+    def _iou_max(self, iou, dim=1):
+        '''find the maximum values and corresponding indices along
+            specific dimension of the iou matrix. the columns of
+            the iou matrix can be zero.
         
-if __name__ == '__main__':
-    p_conf = torch.rand((1, 2, 4, 10, 18), dtype=torch.float32)
-    tconf  = torch.randint(low=-1, high=1, size=(1, 4, 10, 18), dtype=torch.int64)
-    lossf = torch.nn.CrossEntropyLoss(ignore_index=-1)
-    loss = lossf(p_conf, tconf)
-    print(loss)
+        Args:
+            iou: intersection over union matrix.
+        Returns:
+            (values, indices): the maximum values and corresponding
+                indices
+        '''
+        if iou.size(1) > 0:
+            return iou.max(dim)
+        else:
+            values = self.FloatTensor(iou.size(0),).fill_(0)
+            indices = self.LongTensor(iou.size(0),).fill_(False)
+            return (values, indices)
+
+    def _encode_bbox(self, tbboxes, anchor_boxes):
+        '''encode the truth boxes as expecting prediction output.
+        
+        Args:
+            tbboxes: truth boxes which have the format [x, y, w, h]
+            anchor_boxes: anchor boxes witch have the same format as tbboxes
+        Returns:
+            encoded_boxes: encoded boxes
+        '''
+        tx, ty, tw, th = tbboxes.t()
+        px, py, pw, ph = anchor_boxes.t()
+        ex = (tx - px) / pw
+        ey = (ty - py) / ph
+        ew = torch.log(tw / pw)
+        eh = torch.log(th / ph)
+        return torch.stack([ex, ey, ew, eh], dim=1)
