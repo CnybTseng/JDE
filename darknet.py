@@ -165,10 +165,12 @@ class DarkNet(torch.nn.Module):
                 if module.bias is not None:
                     torch.nn.init.constant_(module.bias.data, 0)
             elif isinstance(module, torch.nn.BatchNorm2d):
-                torch.nn.init.constant_(module.weight.data, 1)
-                torch.nn.init.constant_(module.bias.data, 0)
-                torch.nn.init.constant_(module.running_mean.data, 0)
-                torch.nn.init.constant_(module.running_var.data, 0)  
+                # torch.nn.init.constant_(module.weight.data, 1)
+                # torch.nn.init.constant_(module.bias.data, 0)
+                # torch.nn.init.constant_(module.running_mean.data, 0)
+                # torch.nn.init.constant_(module.running_var.data, 0)
+                torch.nn.init.uniform_(module.weight)
+                torch.nn.init.zeros_(module.bias)
 
     def forward(self, x):
         '''前向传播.
@@ -178,7 +180,7 @@ class DarkNet(torch.nn.Module):
         x : Tensor
             输入图像张量.
         '''
-        
+
         outputs = []
         tensors1, tensors2, tensors3, tensors4 = [], [], [], []
         tensors5, tensors6, tensors7, tensors8 = [], [], [], []

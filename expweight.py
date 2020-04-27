@@ -9,6 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Export weights of trained model from D. Bolya')
     parser.add_argument('--trained-model', type=str, default='', help='path to the trained model')
     parser.add_argument('--exported-model', type=str, default='', help='path to the exported model')
+    parser.add_argument('--export-backbone-only', '-ebo', dest='ebo', help='export backbone only')
     args = parser.parse_args()
     return args
 
@@ -26,15 +27,20 @@ def main(args):
     
     i = 0
     for name, module in net.named_modules():
+        if args.ebo and name is 'pair1':
+            break
         if isinstance(module, torch.nn.Conv2d):
+            print(f"write to {name}.weight")
             assert module.weight.size() == weights[i].size()
             module.weight.data = weights[i].data.clone()
             i += 1
             if module.bias is not None:
+                print(f"write to {name}.bias")
                 assert module.bias.size() == weights[i].size()
                 module.bias.data = weights[i].data.clone()
                 i += 1
         elif isinstance(module, torch.nn.BatchNorm2d):
+            print(f"write to {name}")
             assert module.weight.size() == weights[i].size()
             module.weight.data = weights[i].data.clone()
             i += 1
@@ -48,6 +54,7 @@ def main(args):
             module.running_var.data = weights[i].data.clone()
             i += 1
         elif isinstance(module, torch.nn.Linear):
+            print(f"write to {name}")
             assert module.weight.size() == weights[i].size()
             module.weight.data = weights[i].data.clone()
             i += 1

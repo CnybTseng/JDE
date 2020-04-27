@@ -58,12 +58,12 @@ if __name__ == '__main__':
         targets = torch.cat(targets, dim=0).to(device)
         print(targets.size())
         start = timeit.default_timer()
-        loss, lbboxes, lclasss, lidents = criterion(xs, targets, (h, w))
+        loss, metrics = criterion(xs, targets, (h, w))
         end = timeit.default_timer()
         duration += (end - start)
         count += 1
         print(f"average execution time is {duration / count} seconds.")
-        # print(loss)
-        # print(lbboxes)
-        # print(lclasss)
-        # print(lidents)
+        for metric in metrics:
+            for key, val in metric.items():
+                print(f"{key}:%.5f " % val, end='')
+            print('')

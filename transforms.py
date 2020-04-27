@@ -36,7 +36,7 @@ class RandomSpatialJitter(object):
         rdh = random.randint(-dh, dh)
         ar = float(image.size(3) + rdw) / float(image.size(2) + rdh)
 
-        if ar < 1:
+        if ar < self.net_w / self.net_h:
             nh = self.net_h
             nw = int(ar * nh)
         else:
@@ -54,10 +54,10 @@ class RandomSpatialJitter(object):
             mode='bilinear', align_corners=True).type_as(image)
         
         if target.numel() > 0:
-            target[:,2] = (target[:,2] * nw + dx) / self.net_w
-            target[:,3] = (target[:,3] * nh + dy) / self.net_h
-            target[:,4] =  target[:,4] * nw / self.net_w
-            target[:,5] =  target[:,5] * nh / self.net_h
+            target[:,3] = (target[:,3] * nw + dx) / self.net_w
+            target[:,4] = (target[:,4] * nh + dy) / self.net_h
+            target[:,5] =  target[:,5] * nw / self.net_w
+            target[:,6] =  target[:,6] * nh / self.net_h
         
         return jit_image, target
 
@@ -209,7 +209,7 @@ class RandomHorizontalFlip(object):
         if random.random() < self.prob:
             image = image.flip(-1)
             if target.numel() > 0:
-                target[:,2] = 1 - target[:,2]
+                target[:,3] = 1 - target[:,3]
 
         return image, target
 
@@ -228,7 +228,7 @@ class MakeLetterBoxImage(object):
     
     def __call__(self, image, target):
         ar = image.size(3) / image.size(2)
-        if ar < 1:
+        if ar < self.width / self.height:
             nh = self.height
             nw = int(ar * nh)
         else:
@@ -246,10 +246,10 @@ class MakeLetterBoxImage(object):
             mode='bilinear', align_corners=True).type_as(image)
         
         if target is not None and target.numel() > 0:
-            target[:,2] = (target[:,2] * nw + dx) / self.width
-            target[:,3] = (target[:,3] * nh + dy) / self.height
-            target[:,4] =  target[:,4] * nw / self.width
-            target[:,5] =  target[:,5] * nh / self.height
+            target[:,3] = (target[:,3] * nw + dx) / self.width
+            target[:,4] = (target[:,4] * nh + dy) / self.height
+            target[:,5] =  target[:,5] * nw / self.width
+            target[:,6] =  target[:,6] * nh / self.height
         
         return lb_image, target
 

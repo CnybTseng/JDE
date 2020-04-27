@@ -53,8 +53,11 @@ class YOLOv3SingleDecoder(torch.nn.Module):
         x = x.view(n, num_anchors, 5 + self.num_classes, h, w)
         x = x.permute(0, 1, 3, 4, 2).contiguous()        
         
-        x[..., 4:6] = torch.softmax(x[..., 4:6], dim=-1)[...,[1,0]]
-        x[..., 5] = 0
+        if self.training:
+            x[..., 4:6] = torch.softmax(x[..., 4:6].clone(), dim=-1)
+        else:
+            x[..., 4:6] = torch.softmax(x[..., 4:6], dim=-1)[...,[1,0]]
+            x[..., 5] = 0
         
         y = F.normalize(y).permute(0, 2, 3, 1).contiguous()
         
@@ -184,11 +187,13 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
             loss += (torch.exp(-self.sb) * lb + torch.exp(-self.sc) * lc + \
                 torch.exp(self.si) * li + self.sb + self.sc + self.si) * 0.5
         
-        # just for log
-        lbboxes = [lb.item() for lb in lbboxes]
-        lclasss = [lc.item() for lc in lclasss]
-        lidents = [li.item() for li in lidents]
-        return loss, lbboxes, lclasss, lidents
+        # just for log        
+        metrics = []
+        for lb, lc, li in zip(lbboxes, lclasss, lidents):
+            metrics.append({'LBOX':lb.detach().cpu().item(),
+                'LCLA':lc.detach().cpu().item(), 'LIDE':li.detach().cpu().item()})
+        
+        return loss, metrics
     
     def _build_targets(self, n, targets, gsizes):
         '''build training targets.

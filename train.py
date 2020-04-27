@@ -22,7 +22,7 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler, data_loader, epoc
     msgs = []
     widgets = ['Training epoch %d: ' % (epoch+1), Percentage(), ' ', Bar('#'), ' ', Timer(), ' ', ETA()]
     pbar = ProgressBar(widgets=widgets, maxval=len(data_loader)).start()
-    size = [416,416]
+    size = [320,576]
     for batch_id, (images, targets) in enumerate(data_loader):
         ys = model(images.to(device))
         loss, metrics = criterion(ys, targets.to(device), size)
@@ -39,8 +39,8 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler, data_loader, epoc
         
         msgs.append((loss.detach().cpu().item(), metrics, lr_scheduler.get_lr()[0]))
         pbar.update(batch_id + 1)
-        size = scale_sampler(total_batches + 1)
-        shared_size[0], shared_size[1] = size[0], size[1]
+        # size = scale_sampler(total_batches + 1)
+        # shared_size[0], shared_size[1] = size[0], size[1]
     
     pbar.finish()
     return msgs
@@ -63,14 +63,13 @@ def main(args):
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size, True, num_workers=args.workers, collate_fn=collate_fn, pin_memory=args.pin)
 
-    model = darknet.DarkNet(anchors, in_size, num_classes=args.num_classes).to(device)
+    num_ids = dataset.max_id + 1
+    model = darknet.DarkNet(num_classes=args.num_classes, num_ids=num_ids).to(device)
     if args.checkpoint:
         print(f'load {args.checkpoint}')
         model.load_state_dict(torch.load(args.checkpoint))    
-    if args.sparsity:
-        model.load_prune_permit('model/prune_permit.json')
         
-    criterion = yolov3.YOLOv3Loss(args.num_classes, anchors, 1000, model.classifier).to(device)
+    criterion = yolov3.YOLOv3Loss(args.num_classes, anchors, num_ids, model.classifier).to(device)
     
     params = [p for p in model.parameters() if p.requires_grad]
     if args.optim == 'sgd':
@@ -100,6 +99,7 @@ def main(args):
         start_epoch = 0
     print(f'Start training from epoch {start_epoch}')
 
+    torch.autograd.set_detect_anomaly(True)
     for epoch in range(start_epoch, args.epochs):
         msgs = train_one_epoch(model, criterion, optimizer, lr_scheduler, data_loader, epoch, args.interval, shared_size, scale_sampler, device, args.sparsity, args.lamb)
         utils.print_training_message(args.workspace, epoch + 1, msgs, args.batch_size)
@@ -111,20 +111,20 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in-size', type=str, default='416,416', help='network input size')
-    parser.add_argument('--num-classes', type=int, default=20, help='number of classes')
+    parser.add_argument('--in-size', type=str, default='320,576', help='network input size')
+    parser.add_argument('--num-classes', type=int, default=1, help='number of classes')
     parser.add_argument('--resume', help='resume training', action='store_true')
     parser.add_argument('--checkpoint', type=str, default='', help='checkpoint model file')
     parser.add_argument('--dataset', type=str, default='dataset', help='dataset path')
-    parser.add_argument('--batch-size', type=int, default=2, help='training batch size')
-    parser.add_argument('--interval', type=int, default=32, help='update weights every #interval batches')
-    parser.add_argument('--scale-step', type=str, default='320,608,10', help='scale step for multi-scale training')
-    parser.add_argument('--rescale-freq', type=int, default=320, help='image rescaling frequency')
-    parser.add_argument('--epochs', type=int, default=200, help='number of total epochs to run')
+    parser.add_argument('--batch-size', type=int, default=8, help='training batch size')
+    parser.add_argument('--interval', type=int, default=1, help='update weights every #interval batches')
+    parser.add_argument('--scale-step', type=str, default='224,512,10', help='scale step for multi-scale training')
+    parser.add_argument('--rescale-freq', type=int, default=80, help='image rescaling frequency')
+    parser.add_argument('--epochs', type=int, default=50, help='number of total epochs to run')
     parser.add_argument('--warmup', type=int, default=1000, help='warmup iterations')
-    parser.add_argument('--workers', type=int, default=0, help='number of data loading workers')
+    parser.add_argument('--workers', type=int, default=4, help='number of data loading workers')
     parser.add_argument('--optim', type=str, default='sgd', help='optimization algorithms[adam or sgd]')
-    parser.add_argument('--lr', type=float, default=0.00001, help='initial learning rate')
+    parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate')
     parser.add_argument('--milestones', type=str, default='7829,11744', help='list of batch indices, must be increasing')
     parser.add_argument('--lr-gamma', type=float, default=0.1, help='factor of decrease learning rate')
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
