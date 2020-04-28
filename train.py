@@ -26,7 +26,7 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler, data_loader, epoc
     for batch_id, (images, targets) in enumerate(data_loader):
         ys = model(images.to(device))
         loss, metrics = criterion(ys, targets.to(device), size)
-        
+
         total_batches = epoch * len(data_loader) + batch_id
         if total_batches % interval == 0:
             optimizer.zero_grad()
@@ -111,7 +111,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in-size', type=str, default='320,576', help='network input size')
+    parser.add_argument('--in-size', type=str, default='576,320', help='network input size')
     parser.add_argument('--num-classes', type=int, default=1, help='number of classes')
     parser.add_argument('--resume', help='resume training', action='store_true')
     parser.add_argument('--checkpoint', type=str, default='', help='checkpoint model file')

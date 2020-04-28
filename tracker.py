@@ -4,6 +4,7 @@ import cv2
 import lap
 import torch
 import argparse
+import collections
 import numpy as np
 from enum import IntEnum
 from torchvision.ops import nms
@@ -512,7 +513,15 @@ class JDETracker(object):
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = darknet.DarkNet().to(device)
-    model.load_state_dict(torch.load(os.path.join(args.model), map_location='cpu'))
+    
+    # load state dict except the classifier layer
+    model_dict = model.state_dict()
+    trained_model_dict = torch.load(os.path.join(args.model), map_location='cpu')
+    trained_model_dict = {k : v for (k, v) in trained_model_dict.items() if k in model_dict}
+    trained_model_dict = collections.OrderedDict(trained_model_dict)
+    model_dict.update(trained_model_dict)
+    model.load_state_dict(model_dict)
+
     model.eval()
 
     mkdir('./result')
@@ -541,6 +550,9 @@ def main(args):
         outputs = decoder(outputs)
         print('{} {} {} {}'.format(path, im.shape, lb_im.shape, outputs.size()), end=' ')
         outputs =  nonmax_suppression(outputs)[0]
+        if outputs is None:
+            print('no object detected!')
+            continue
         print('{}'.format(outputs.size()), end=' ')
         outputs[:, :4] = ltrb_net2img(outputs[:, :4], (h,w), im.shape[:2])
         trajectories = tracker.update(outputs.numpy())
@@ -550,7 +562,7 @@ def main(args):
         segments = re.split(r'[\\, /]', path)
         cv2.imwrite('result/{}'.format(segments[-1]), result)
     
-    os.system('./bin/ffmpeg-4.2.2-amd64-static/ffmpeg -i result/%06d.jpg result.mp4')
+    os.system('./bin/ffmpeg-4.2.2-amd64-static/ffmpeg -i result/%06d.jpg result.mp4 -y')
 
 if __name__ == '__main__':
     args = parse_args()

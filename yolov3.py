@@ -35,46 +35,43 @@ class YOLOv3SingleDecoder(torch.nn.Module):
         '''YOLOv3SingleDecoder forward propagation.
         
         Args:
-            xs: list of three backbone outputs.
+            xs: List of three backbone outputs.
         Returns:
-            list of the decoded outputs.
+            List of the decoded outputs:(bbox, xywhoc, embedding). In
+                training mode, the bbox is None. In evaluation mode,
+                the bbox is a (n,a,h,w,4) tensor. The xywhoc is a
+                (n,a,h,w,c) tensor, and the embedding is a (n,h,w,c) tensor.
         '''
         return [self.__decoder(x,self.anchors[mask,:]) for (x,mask) in \
             zip(xs,self.anchor_masks)]
     
     def __decoder(self, x, anchors):
-        size = anchors.size(0) * (5 + self.num_classes)
-        y = x[:, size:, ...]
-        x = x[:, :size, ...]      
+        num_anchors = self.anchor_masks.size(1)
+        cshift = num_anchors * (5 + self.num_classes)                       # channel shift
+        xywhoc    = x[:, :cshift, ...]                                      # n*c*h*w
+        embedding = x[:, cshift:, ...]                                      # n*c*h*w
+        embedding = F.normalize(embedding).permute(0, 2, 3, 1).contiguous() # n*h*w*c
         
         n, c, h, w = x.size()
-        num_anchors = self.anchor_masks.size(1)
-
-        x = x.view(n, num_anchors, 5 + self.num_classes, h, w)
-        x = x.permute(0, 1, 3, 4, 2).contiguous()        
+        xywhoc = xywhoc.view(n, num_anchors, 5 + self.num_classes, h, w)    # n*a*c*h*w
+        xywhoc = xywhoc.permute(0, 1, 3, 4, 2).contiguous()                 # n*a*h*w*c       
         
         if self.training:
-            x[..., 4:6] = torch.softmax(x[..., 4:6].clone(), dim=-1)
+            return xywhoc, embedding
         else:
-            x[..., 4:6] = torch.softmax(x[..., 4:6], dim=-1)[...,[1,0]]
-            x[..., 5] = 0
-        
-        y = F.normalize(y).permute(0, 2, 3, 1).contiguous()
-        
-        aw = anchors[:, 0].view(1, num_anchors, 1, 1)
-        ah = anchors[:, 1].view(1, num_anchors, 1, 1)
-        
-        [gy, gx] = torch.meshgrid(torch.arange(h), torch.arange(w))        
-        gx = gx.view(1, 1, gx.size(0), gx.size(1)).type(self.FloatTensor)
-        gy = gy.view(1, 1, gy.size(0), gy.size(1)).type(self.FloatTensor)                
-        bx = (x[..., 0].data * aw.data + gx.data * self.in_size[1] / w)
-        by = (x[..., 1].data * ah.data + gy.data * self.in_size[0] / h)
-       
-        bw = torch.exp(x[..., 2].data) * aw.data
-        bh = torch.exp(x[..., 3].data) * ah.data
-        
-        bbox = torch.stack([bx,by,bw,bh], dim=-1)
-        return bbox, x, y
+            xywhoc[..., 4:] = torch.softmax(xywhoc[..., 4:], dim=-1)[...,[1,0]]
+            xywhoc[..., 5] = 0            
+            aw = anchors[:, 0].view(1, num_anchors, 1, 1)
+            ah = anchors[:, 1].view(1, num_anchors, 1, 1)           
+            [gy, gx] = torch.meshgrid(torch.arange(h), torch.arange(w))        
+            gx = gx.view(1, 1, gx.size(0), gx.size(1)).type(self.FloatTensor)
+            gy = gy.view(1, 1, gy.size(0), gy.size(1)).type(self.FloatTensor)                
+            bx = (xywhoc[..., 0].data * aw.data + gx.data * self.in_size[1] / w)
+            by = (xywhoc[..., 1].data * ah.data + gy.data * self.in_size[0] / h)        
+            bw = torch.exp(xywhoc[..., 2].data) * aw.data
+            bh = torch.exp(xywhoc[..., 3].data) * ah.data            
+            bbox = torch.stack([bx, by, bw, bh], dim=-1)
+            return bbox, xywhoc, embedding
 
 class YOLOv3Decoder(YOLOv3SingleDecoder):
     '''composed YOLOv3 decoder layer.
@@ -88,6 +85,7 @@ class YOLOv3Decoder(YOLOv3SingleDecoder):
     def __init__(self, in_size, num_classes, anchors, embd_dim=512):
         super(YOLOv3Decoder, self).__init__(in_size, num_classes,
             anchors, embd_dim)
+        super().eval()
     
     def forward(self, xs):
         '''YOLOv3Decoder forward propagation.
@@ -131,7 +129,7 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         self.iden_thresh = 0.5  # identifier threshold
         self.frgd_thresh = 0.5  # foreground confidence threshold
         self.bkgd_thresh = 0.4  # background confidence threshold
-        self.embd_scale  = math.sqrt(2) * math.log(self.num_idents) \
+        self.embd_scale  = math.sqrt(2) * math.log(self.num_idents - 1) \
             if self.num_idents > 1 else 1
         self.BoolTensor = torch.cuda.BoolTensor if \
             torch.cuda.is_available() else torch.BoolTensor
@@ -151,14 +149,14 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
 
         # decode backbone outputs
         outputs = super().forward(xs)
-        pbboxes = [output[1][..., : 4] for output in outputs]                           # n*a*h*w*4
-        pclasss = [output[1][..., 4 : 5 + self.num_classes] for output in outputs]      # n*a*h*w*2
+        pbboxes = [output[0][..., : 4] for output in outputs]                           # n*a*h*w*4
+        pclasss = [output[0][..., 4 :] for output in outputs]                           # n*a*h*w*2
         pclasss = [pclass.permute(0, 4, 1, 2, 3).contiguous() for pclass in pclasss]    # n*2*a*h*w
-        pembeds = [output[2] for output in outputs]                                     # n*h*w*512
+        pembeds = [output[1] for output in outputs]                                     # n*h*w*512
         
         # build targets for three heads
         batch_size = xs[0].size(0)
-        gsizes = [list(output[1].shape[2:4]) for output in outputs]
+        gsizes = [list(output[0].shape[2:4]) for output in outputs]
         tbboxes, tclasss, tidents = self._build_targets(batch_size, targets, gsizes)
         
         # select predictions and truths based on object mask
@@ -174,12 +172,15 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         for i, (pb, tb, m) in enumerate(zip(pbboxes, tbboxes, masks)):
             if m.sum() > 0:
                 lbboxes[i] = self.bbox_lossf(pb[m], tb[m])                          # x*4
+                print(f"box: {pb[m]} vs {tb[m]}")
         lclasss = [self.clas_lossf(pc, tc) for pc, tc in zip(pclasss, tclasss)]
+        # for pc, tc in zip(pclasss, tclasss): print(f"class: {pc} vs {tc}")
         lidents = [self.FloatTensor([0])] * len(pembeds)
         for i, (pembed, tident) in enumerate(zip(pembeds, tidents)):
             if pembed.size(0) > 0:
                 pident = self.classifier(pembed).contiguous()                       # x*num_idents
                 lidents[i] = self.iden_lossf(pident, tident)
+                print(f"id: {pident} vs {tident}")
         
         # total loss
         loss = self.FloatTensor([0])

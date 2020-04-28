@@ -151,7 +151,7 @@ class DarkNet(torch.nn.Module):
         self.conv6 = torch.nn.Conv2d(in_channels=128, out_channels=self.embedding_channels, kernel_size=3, padding=1, bias=True)
         self.route10 = Route()
 
-        '''Shared identities classifier'''
+        '''Shared identifiers classifier'''
 
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
 

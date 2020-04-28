@@ -10,7 +10,7 @@ import torch.nn.functional as tnf
 from torchvision.transforms import functional as ttf
 
 class RandomSpatialJitter(object):
-    def __init__(self, jitter=0.3, net_w=416, net_h=416):
+    def __init__(self, jitter=0.3, net_w=576, net_h=320):
         '''随机的空间扰动.输入输出图像的值域均为[0,255].类型不变.
         
         参数
@@ -220,7 +220,7 @@ class ToTensor(object):
         return image, target
 
 class MakeLetterBoxImage(object):
-    def __init__(self, width=416, height=416):
+    def __init__(self, width=576, height=320):
         self.width = width
         self.height = height
         self.cuda = torch.cuda.is_available()
