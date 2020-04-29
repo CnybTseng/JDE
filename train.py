@@ -53,11 +53,10 @@ def main(args):
     
     utils.make_workspace_dirs(args.workspace)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    in_size = [int(s) for s in args.in_size.split(',')]
     scale_step = [int(ss) for ss in args.scale_step.split(',')]
     anchors = np.loadtxt(os.path.join(args.dataset, 'anchors.txt'))
     scale_sampler = utils.TrainScaleSampler(scale_step, args.rescale_freq)
-    shared_size = torch.IntTensor(in_size).share_memory_()
+    shared_size = torch.IntTensor(args.in_size).share_memory_()
 
     dataset = ds.CustomDataset(args.dataset, 'train')
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
@@ -111,7 +110,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in-size', type=str, default='576,320', help='network input size')
+    parser.add_argument('--in-size', type=int, default=[576,320], nargs='+', help='network input size')
     parser.add_argument('--num-classes', type=int, default=1, help='number of classes')
     parser.add_argument('--resume', help='resume training', action='store_true')
     parser.add_argument('--checkpoint', type=str, default='', help='checkpoint model file')

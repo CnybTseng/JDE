@@ -24,7 +24,14 @@ def parse_args():
     parser.add_argument('--img-path', type=str, help='path to image path')
     parser.add_argument('--model', type=str, help='path to tracking model')
     parser.add_argument('--insize', type=str, default='320x576',
-        help='network input size, default=320x576')
+        help='network input size, default=320x576, other options are'
+        ' 480x864 and 608x1088')
+    parser.add_argument('--score-thresh', type=float, default=0.5,
+        help='nms score threshold, default=0.5, it must be in [0,1]')
+    parser.add_argument('--iou-thresh', type=float, default=0.4,
+        help='nms iou threshold, default=0.4, it must be in [0,1]')
+    parser.add_argument('--only-detect', action='store_true',
+        help='only detecting object, no tracking')
     return parser.parse_args()
 
 def mkdir(path):
@@ -541,7 +548,7 @@ def main(args):
     h, w = [int(s) for s in args.insize.split('x')]
     decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors)
     tracker = JDETracker()
-    dataloader = dataset.ImagesLoader(args.img_path, (h,w,3))
+    dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
     
     for path, im, lb_im in dataloader:
         input = torch.from_numpy(lb_im).unsqueeze(0).to(device)
@@ -549,16 +556,19 @@ def main(args):
             outputs = model(input)
         outputs = decoder(outputs)
         print('{} {} {} {}'.format(path, im.shape, lb_im.shape, outputs.size()), end=' ')
-        outputs =  nonmax_suppression(outputs)[0]
+        outputs =  nonmax_suppression(outputs, args.score_thresh, args.iou_thresh)[0]
         if outputs is None:
             print('no object detected!')
             continue
         print('{}'.format(outputs.size()), end=' ')
         outputs[:, :4] = ltrb_net2img(outputs[:, :4], (h,w), im.shape[:2])
-        trajectories = tracker.update(outputs.numpy())
-        print('{}'.format(len(trajectories)))
-        # result = overlap(outputs, im)
-        result = overlap_trajectory(trajectories, im)
+        if not args.only_detect:
+            trajectories = tracker.update(outputs.numpy())
+            print('{}'.format(len(trajectories)))        
+            result = overlap_trajectory(trajectories, im)
+        else:
+            print('')
+            result = overlap(outputs, im)
         segments = re.split(r'[\\, /]', path)
         cv2.imwrite('result/{}'.format(segments[-1]), result)
     

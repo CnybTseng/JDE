@@ -119,12 +119,12 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         super(YOLOv3Loss, self).__init__((608,1088), num_classes, anchors,
             embd_dim=512)
         self.num_idents = num_idents
-        self.classifier = classifier                     # embedding mapping to class logits
-        self.sb = nn.Parameter(-4.85 * torch.ones(1))    # location task uncertainty
-        self.sc = nn.Parameter(-4.15 * torch.ones(1))    # classification task uncertainty
-        self.si = nn.Parameter(-2.30 * torch.ones(1))    # identification task uncertainty
+        self.classifier = classifier                                # embedding mapping to class logits
+        self.sbs = [nn.Parameter(-4.85 * torch.ones(1)).cuda()] * 3        # location task uncertainty
+        self.scs = [nn.Parameter(-4.15 * torch.ones(1)).cuda()] * 3        # classification task uncertainty
+        self.sis = [nn.Parameter(-2.30 * torch.ones(1)).cuda()] * 3        # identification task uncertainty
         self.bbox_lossf = nn.SmoothL1Loss()
-        self.clas_lossf = nn.CrossEntropyLoss(ignore_index=-1)   # excluding no-identifier samples
+        self.clas_lossf = nn.CrossEntropyLoss(ignore_index=-1)      # excluding no-identifier samples
         self.iden_lossf = nn.CrossEntropyLoss(ignore_index=-1)
         self.iden_thresh = 0.5  # identifier threshold
         self.frgd_thresh = 0.5  # foreground confidence threshold
@@ -172,21 +172,19 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         for i, (pb, tb, m) in enumerate(zip(pbboxes, tbboxes, masks)):
             if m.sum() > 0:
                 lbboxes[i] = self.bbox_lossf(pb[m], tb[m])                          # x*4
-                print(f"box: {pb[m]} vs {tb[m]}")
+
         lclasss = [self.clas_lossf(pc, tc) for pc, tc in zip(pclasss, tclasss)]
-        # for pc, tc in zip(pclasss, tclasss): print(f"class: {pc} vs {tc}")
         lidents = [self.FloatTensor([0])] * len(pembeds)
         for i, (pembed, tident) in enumerate(zip(pembeds, tidents)):
             if pembed.size(0) > 0:
                 pident = self.classifier(pembed).contiguous()                       # x*num_idents
                 lidents[i] = self.iden_lossf(pident, tident)
-                print(f"id: {pident} vs {tident}")
         
         # total loss
         loss = self.FloatTensor([0])
-        for lb, lc, li in zip(lbboxes, lclasss, lidents):
-            loss += (torch.exp(-self.sb) * lb + torch.exp(-self.sc) * lc + \
-                torch.exp(self.si) * li + self.sb + self.sc + self.si) * 0.5
+        for i, (lb, lc, li) in enumerate(zip(lbboxes, lclasss, lidents)):
+            loss += (torch.exp(-self.sbs[i]) * lb + torch.exp(-self.scs[i]) * lc + \
+                torch.exp(-self.sis[i]) * li + self.sbs[i] + self.scs[i] + self.sis[i]) * 0.5
         
         # just for log        
         metrics = []

@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 
 import transforms as T
+import dataset
 
 transforms = []
 transforms.append(T.ToTensor())
