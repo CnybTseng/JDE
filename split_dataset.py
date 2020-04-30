@@ -9,9 +9,6 @@ parser.add_argument('--path', type=str, help='path to training samples')
 parser.add_argument('--train-ratio', '-tr', dest='tr', default=1, type=float, help='the ratio of training samples')
 args = parser.parse_args()
 
-assert args.path
-assert args.tr > 0.5 and args.tr < 1.000001
-
 image_filenames = []
 for p in args.path.split(','):
     image_filenames += list(sorted(glob.glob(os.path.join(p, '*.jpg'))))
@@ -27,6 +24,7 @@ num_test = num_samples - num_train
 with open('train.txt', 'w') as file:
     for i in range(num_train):
         root, ext = os.path.splitext(image_filenames[rand_index[i]])
+        root = root.replace('img1', 'labels_with_ids')
         file.write(f"{image_filenames[rand_index[i]]} {root}.txt\n")
     file.close()
 
@@ -36,5 +34,6 @@ if num_test < 1:
 with open('test.txt', 'w') as file:
     for i in range(num_train, num_samples):
         root, ext = os.path.splitext(image_filenames[rand_index[i]])
+        root = root.replace('img1', 'labels_with_ids')
         file.write(f"{image_filenames[rand_index[i]]} {root}.txt\n")
     file.close()

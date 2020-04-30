@@ -76,6 +76,10 @@ def main(args):
     else:
         optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.weight_decay)
 
+    # freezon batch normalization layers
+    for name, param in model.named_parameters():
+        param.requires_grad = False if 'norm' in name else True
+
     trainer = f'{args.workspace}/checkpoint/trainer-ckpt.pth'
     if args.resume:
         trainer_state = torch.load(trainer)

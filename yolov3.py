@@ -174,6 +174,12 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
                 lbboxes[i] = self.bbox_lossf(pb[m], tb[m])                          # x*4
 
         lclasss = [self.clas_lossf(pc, tc) for pc, tc in zip(pclasss, tclasss)]
+        
+        # with torch.no_grad():
+        #     for m, pc in zip(masks, pclasss):
+        #         ppp = pc.permute(0, 2, 3, 4, 1)
+        #         print('{} {}'.format(ppp[~m].mean(dim=0), ppp[m].mean(dim=0)))
+        
         lidents = [self.FloatTensor([0])] * len(pembeds)
         for i, (pembed, tident) in enumerate(zip(pembeds, tidents)):
             if pembed.size(0) > 0:
