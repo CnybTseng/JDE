@@ -160,10 +160,11 @@ class DarkNet(torch.nn.Module):
     def __init_weights(self):
         for name, module in self.named_modules():
             if isinstance(module, torch.nn.Conv2d):
-                torch.nn.init.normal_(module.weight.data)
-                module.weight.data *= (2.0/module.weight.numel())
-                if module.bias is not None:
-                    torch.nn.init.constant_(module.bias.data, 0)
+                # torch.nn.init.normal_(module.weight.data)
+                # module.weight.data *= (2.0/module.weight.numel())
+                # if module.bias is not None:
+                #     torch.nn.init.constant_(module.bias.data, 0)
+                pass
             elif isinstance(module, torch.nn.BatchNorm2d):
                 # torch.nn.init.constant_(module.weight.data, 1)
                 # torch.nn.init.constant_(module.bias.data, 0)
@@ -171,6 +172,8 @@ class DarkNet(torch.nn.Module):
                 # torch.nn.init.constant_(module.running_var.data, 0)
                 torch.nn.init.uniform_(module.weight)
                 torch.nn.init.zeros_(module.bias)
+            elif isinstance(module, torch.nn.Linear):
+                pass
 
     def forward(self, x):
         '''前向传播.

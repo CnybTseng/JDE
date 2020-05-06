@@ -23,7 +23,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     dataset = dataset.CustomDataset(args.dataset, 'train')
-    num_ids = dataset.max_id + 1
+    num_ids = dataset.max_id + 2
     print(num_ids)
     model = darknet.DarkNet(num_classes=args.num_classes, num_ids=num_ids)
     

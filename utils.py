@@ -12,16 +12,37 @@ import torch
 import numpy as np
 
 class TrainScaleSampler(object):
-    def __init__(self, scale_step=(224,512,10), rescale_freq=320):
+    '''Multiple scales training scale sampler.
+    
+    Args:
+        size: Default sampling size. The size is [height, width].
+        scale_step: Image scale step. The scale_step is [ystart, ystop,
+            num, xstart, xstop]. The ystart is the starting value of the
+            image height sequence, and the ystop is the end value of the
+            image height sequence. The num is the number of samples to
+            generate. The xstart and xstop are optional, if neither of
+            them is seted, xstart and xstop will be equal to ystart and
+            ystop respectively.
+        rescale_freq: Image rescale frequency. The image will be rescaled
+            every #rescale_freq batches.
+    '''
+    def __init__(self, size=(416,416), scale_step=(320,608,10),
+        rescale_freq=320):
         self.scale_step = scale_step
         self.rescale_freq = rescale_freq
-        self.size = [320,576]
+        self.size = size
     
     def __call__(self, num_batches=0):
         if num_batches % self.rescale_freq == 0:
-            sizes = np.linspace(start=self.scale_step[0], stop=self.scale_step[1], num=self.scale_step[2], dtype=np.int32)
-            rand_size = sizes[np.random.randint(len(sizes))]
-            self.size = [rand_size.item(), int(rand_size.item() * 1.8)]
+            heights = np.linspace(self.scale_step[0], self.scale_step[1],
+                num=self.scale_step[2], dtype=np.int32)
+            if len(scale_step == 5):
+                widths = np.linspace(self.scale_step[3], self.scale_step[4],
+                    num=self.scale_step[2], dtype=np.int32)
+            else:
+                widths = heights
+            rn = np.random.randint(len(heights))
+            self.size = [heights[rn].item(), widths[rn],item()]
         return self.size
 
 def make_workspace_dirs(workspace='./workspace'):

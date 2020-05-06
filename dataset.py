@@ -73,7 +73,7 @@ class ImagesLoader(object):
         lb_im /= 255.0
         return path, im, lb_im
 
-def get_transform(train, net_w=576, net_h=320):
+def get_transform(train, net_w=416, net_h=416):
     transforms = []
     transforms.append(T.ToTensor())
     if train == True:
@@ -84,8 +84,8 @@ def get_transform(train, net_w=576, net_h=320):
         transforms.append(T.MakeLetterBoxImage(width=net_w,height=net_h))
     return T.Compose(transforms)
 
-def collate_fn(batch, in_size=torch.IntTensor([576,320]), train=False):
-    transforms = get_transform(train, in_size[0].item(), in_size[1].item())
+def collate_fn(batch, in_size=torch.IntTensor([416,416]), train=False):
+    transforms = get_transform(train, in_size[1].item(), in_size[0].item())
     images, targets = [], []
     for i,b in enumerate(batch):
         image, target = transforms(b[0], b[1])

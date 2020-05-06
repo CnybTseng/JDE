@@ -156,7 +156,7 @@ def overlap_trajectory(trajectories, im):
         text_size, baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, 1)
         x = min(max(l, 0), im.shape[1] - text_size[0] - 1)
         y = min(max(b - baseline, text_size[1]), im.shape[0] - baseline - 1)
-        cv2.putText(im, text, (x, y), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, color, thickness=1)
+        cv2.putText(im, text, (x, y), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,255), thickness=1)
     return im
 
 class TrajectoryState(IntEnum):
@@ -550,6 +550,7 @@ def main(args):
     tracker = JDETracker()
     dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
     
+    os.system('rm -f result/*')
     for path, im, lb_im in dataloader:
         input = torch.from_numpy(lb_im).unsqueeze(0).to(device)
         with torch.no_grad():
