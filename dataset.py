@@ -85,15 +85,17 @@ def get_transform(train, net_w=416, net_h=416):
     return T.Compose(transforms)
 
 def collate_fn(batch, in_size=torch.IntTensor([416,416]), train=False):
-    transforms = get_transform(train, in_size[1].item(), in_size[0].item())
+    # transforms = get_transform(train, in_size[1].item(), in_size[0].item())
     images, targets = [], []
     for i,b in enumerate(batch):
-        image, target = transforms(b[0], b[1])
-        image = image.type(torch.FloatTensor) / 255
+        # image, target = transforms(b[0], b[1])
+        image, target = b[0], b[1]
+        # image = image.type(torch.FloatTensor) / 255
         target[:,0] = i
         images.append(image)
         targets.append(target)
-    return torch.cat(tensors=images, dim=0), torch.cat(tensors=targets, dim=0)
+    # return torch.cat(tensors=images, dim=0), torch.cat(tensors=targets, dim=0)
+    return torch.stack(tensors=images, dim=0), torch.cat(tensors=targets, dim=0)
 
 class CustomDataset(object):
     def __init__(self, root, file='train'):
@@ -107,16 +109,28 @@ class CustomDataset(object):
         image_path = self.images_path[index]
         annocation_path = self.annocations_path[index]
 
-        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-        assert image is not None, 'cv2.imread({image_path}) fail'
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        org_size = image.shape[:2]
-        annocation = np.loadtxt(annocation_path).reshape(-1, 6)
+        # image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        # assert image is not None, 'cv2.imread({image_path}) fail'
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # org_size = image.shape[:2]
+        # annocation = np.loadtxt(annocation_path).reshape(-1, 6)
+        # 
+        # target = []
+        # for c, i, x, y, w, h in annocation:
+        #     target.append([0, c, i, x, y, w, h])
+        # 
+        # target = torch.as_tensor(target, dtype=torch.float32, device=torch.device('cpu'))
+        # if target.size(0) == 0:
+        #     target = torch.FloatTensor(0, 7)
+        
+        from xxx import LoadImagesAndLabels
+        loader = LoadImagesAndLabels()
+        image, labels, _, _ = loader.get_data(image_path, annocation_path)
         
         target = []
-        for c, i, x, y, w, h in annocation:
+        for c, i, x, y, w, h in labels:
             target.append([0, c, i, x, y, w, h])
-
+        
         target = torch.as_tensor(target, dtype=torch.float32, device=torch.device('cpu'))
         if target.size(0) == 0:
             target = torch.FloatTensor(0, 7)
