@@ -66,11 +66,11 @@ def print_training_message(workspace, epoch, msgs, batch_size):
                     else : file.write(f'{k}:%.5f ' % v)
                 file.write('\n')
             losses += loss
-            file.write('\n')
+            file.write(f'LOSS:%.5f\n' % loss)
             lrs.append(lr)
         losses /= (num_batches * num_yolo * batch_size)
-        file.write(f'Epoch {epoch} done, total losses:%.5f\n' % losses)
-        print(f'Epoch {epoch} done, total losses:%.5f' % losses)
+        file.write(f'Epoch {epoch} done, average loss:%.5f\n' % losses)
+        print(f'Epoch {epoch} done, average loss:%.5f' % losses)
         file.close()
     
     with open(f'{workspace}/log/loss.txt', 'a') as file:

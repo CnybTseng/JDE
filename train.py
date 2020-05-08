@@ -140,6 +140,8 @@ def train(args):
     # freezon batch normalization layers
     for name, param in model.named_parameters():
         param.requires_grad = False if 'norm' in name else True
+        if 'norm' in name:
+            print(f'freeze {name}')
 
     trainer = f'{args.workspace}/checkpoint/trainer-ckpt.pth'
     if args.resume:

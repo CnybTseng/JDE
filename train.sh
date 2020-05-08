@@ -7,10 +7,10 @@ python train.py \
     --scale-step 224 512 10 480 768 \
     --rescale-freq 265801 \
     --workers 8 \
-    --epochs 50 \
+    --epochs 100 \
     --lr 0.01 \
-    --milestones 16625 24937 \
+    --milestones 33250 49875 \
     --weight-decay 0.0001 \
     --savename jde \
     --pin \
-    --workspace workspace/mot16-2020-5-6-2/
+    --workspace workspace/mot16-2020-5-8/
