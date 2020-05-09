@@ -23,6 +23,7 @@ public:
     int num_mask_groups;
     ncnn::Layer* softmax;
     ncnn::Layer* permute;
+    ncnn::Layer* normalize;
 };
 
 }   // namespace ncnn

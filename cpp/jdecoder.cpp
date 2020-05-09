@@ -14,6 +14,7 @@ namespace ncnn {
 
 struct Detection {
     int category;
+    float score;
     struct {
         float top;
         float left;
@@ -30,14 +31,36 @@ JDEcoder::JDEcoder()
     one_blob_only = false;
     support_inplace = false;
     
-    ncnn::ParamDict pd;
-    pd.set(0, 3);
-    permute->load_param(pd);
+    ncnn::ParamDict pd1;
+    pd1.set(0, 0);
+    softmax = ncnn::create_layer(ncnn::LayerType::Softmax);
+    softmax->load_param(pd1);
+    
+    ncnn::ParamDict pd2;
+    pd2.set(0, 3);
+    permute = ncnn::create_layer(ncnn::LayerType::Permute);
+    permute->load_param(pd2);
+    
+    ncnn::ParamDict pd3;
+    pd3.set(0, 1);
+    pd3.set(4, 1);
+    pd3.set(1, 0);
+    pd3.set(2, 0.0001f);
+    pd3.set(9, 1);
+    pd3.set(3, 1);
+    normalize = ncnn::create_layer(ncnn::LayerType::Normalize);
+    normalize->load_param(pd3);
+    Mat scale[1];
+    scale[0] = Mat(1);
+    scale[0][0] = 1.f;
+    normalize->load_model(ModelBinFromMatArray(scale));
 }
 
 JDEcoder::~JDEcoder()
 {
-    
+    delete softmax;
+    delete permute;
+    delete normalize;
 }
 
 int JDEcoder::load_param(const ParamDict& pd)
@@ -52,14 +75,91 @@ int JDEcoder::load_param(const ParamDict& pd)
     return 0;
 }
 
+static inline float calc_inter_area(const Detection& a, const Detection& b)
+{
+    if (a.bbox.top > b.bbox.bottom || a.bbox.bottom < b.bbox.top ||
+        a.bbox.left > b.bbox.right || a.bbox.right < b.bbox.left)
+        return 0.f;
+    
+    float w = std::min(a.bbox.right, b.bbox.right) - std::max(a.bbox.left, b.bbox.left);
+    float h = std::min(a.bbox.bottom, b.bbox.bottom) - std::max(a.bbox.top, b.bbox.top);
+    return w * h;
+}
+
+static void qsort_descent_inplace(std::vector<Detection>& data, int left, int right)
+{
+    int i = left;
+    int j = right;
+    float pivot = data[(left + right) >> 1].score;
+    while (i <= j)
+    {
+        while (data[i].score > pivot)
+            ++i;
+        
+        while (data[j].score < pivot)
+            --j;
+        
+        if (i <= j)
+        {
+            std::swap(data[i], data[j]);
+            ++i;
+            --j;
+        }
+    }
+    
+    if (left < j)
+        qsort_descent_inplace(data, left, j);
+    
+    if (right > i)
+        qsort_descent_inplace(data, i, right);
+}
+
+static void qsort_descent_inplace(std::vector<Detection>& data)
+{
+    if (data.empty())
+        return;
+    
+    qsort_descent_inplace(data, 0, static_cast<int>(data.size() - 1));
+}
+
+static void nonmaximum_suppression(const std::vector<Detection>& dets, std::vector<size_t>& keeps, float iou_thresh)
+{
+    keeps.clear();
+    const size_t n = dets.size();
+    std::vector<float> areas(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        float w = dets[i].bbox.right - dets[i].bbox.left;
+        float h = dets[i].bbox.bottom - dets[i].bbox.top;
+        areas[i] = w * h;
+    }
+    
+    for (size_t i = 0; i < n; ++i)
+    {
+        const Detection& deti = dets[i];
+        int flag = 1;
+        for (size_t j = 0; j < keeps.size(); ++j)
+        {
+            const Detection& detj = dets[keeps[j]];
+            float inters = calc_inter_area(deti, detj);
+            float unionn = areas[i] + areas[j] - inters;
+            if (inters / unionn > iou_thresh)
+            {
+                flag = 0;
+                break;
+            }
+        }
+        
+        if (flag)
+            keeps.push_back(i);
+    }
+}
+
 int JDEcoder::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& top_blobs, const Option& opt) const
 {
-    std::vector<std::vector<Detection>> dets;
+    std::vector<Detection> dets;
     for (size_t i = 0; i < bottom_blobs.size(); ++i)
-    {
-        std::vector<Detection> deti;
-        deti.resize(num_boxes);
-        
+    {        
         const Mat& bottom_blobi = bottom_blobs[i];        
         int w = bottom_blobi.w;
         int h = bottom_blobi.h;
@@ -68,10 +168,9 @@ int JDEcoder::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& to
         int embd_offset = num_boxes * (4 + 1 + num_classes);
         if (c != embd_offset + EMBD_DIM)
             return -1;
-        
-        // chw to hwc
-        Mat embedding;
-        permute->forward(bottom_blobi.channel_range(embd_offset, EMBD_DIM), embedding);
+
+        Mat embeddings;
+        permute->forward(bottom_blobi.channel_range(embd_offset, EMBD_DIM), embeddings, opt);
         
         const int chan_per_box = embd_offset / num_boxes;
         size_t mask_offset = i * num_boxes;
@@ -109,7 +208,7 @@ int JDEcoder::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& to
                         }
                     }
                     
-                    if (score > conf_thresh)
+                    if (category != 0 && score > conf_thresh)
                     {
                         float bx = (x + px[0] * biasw) * strides[i];
                         float by = (y + py[0] * biash) * strides[i];
@@ -118,16 +217,20 @@ int JDEcoder::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& to
 
                         Detection det = {
                             .category = category,
+                            .score = score,
                             .bbox = {
                                 .top = by - bh * 0.5f,
                                 .left = bx - bw * 0.5f,
                                 .bottom = by + bh * 0.5f,
                                 .right = bx + bw * 0.5f
-                            }
+                            },
+                            .embedding = {0}
                         };
                         
-                        memcpy(det.embedding, embedding.row(y)[x], EMBD_DIM * embedding.elemsize);
-                        deti[i].push_back(det);
+                        Mat embedding(EMBD_DIM, embeddings.channel(y).row(x));
+                        normalize->forward_inplace(embedding, opt);
+                        memcpy(det.embedding, embedding.data, EMBD_DIM * embedding.elemsize);
+                        dets.push_back(det);
                     }
                     
                     ++px;
@@ -137,6 +240,32 @@ int JDEcoder::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& to
                 }
             }
         }
+    }
+    
+    qsort_descent_inplace(dets);
+    
+    std::vector<size_t> keeps;
+    nonmaximum_suppression(dets, keeps, iou_thresh);
+    int num_dets = static_cast<int>(keeps.size());
+    if (num_dets == 0)
+        return 0;
+    
+    Mat& top_blob = top_blobs[0];
+    top_blob.create(6 + EMBD_DIM, num_dets, 4u, opt.blob_allocator);
+    if (top_blob.empty())
+        return -100;
+    
+    for (int i = 0; i < num_dets; ++i)
+    {
+        Detection& det = dets[keeps[i]];
+        float* ptr = top_blob.row(i);
+        ptr[0] = static_cast<float>(det.category + 1);
+        ptr[1] = det.score;
+        ptr[2] = det.bbox.top;
+        ptr[3] = det.bbox.left;
+        ptr[4] = det.bbox.bottom;
+        ptr[5] = det.bbox.right;
+        memcpy(ptr + 6, det.embedding, sizeof(det.embedding));
     }
     
     return 0;
