@@ -3,6 +3,9 @@
 #include <math.h>
 #include <time.h>
 
+// building command:
+// /opt/rh/devtoolset-6/root/usr/bin/g++ -o cdist cdist.cpp
+
 void cdist(float *XA, int ma, float *XB, int mb, int n, float *Y)
 {
     for (int i = 0; i < ma; ++i)
@@ -26,8 +29,8 @@ int main(int argc, char *argv[])
 {
     srand(time(NULL));
     const int n = 512;
-    const int ma = rand() % 50;
-    const int mb = rand() % 50;
+    const int ma = rand() % 10;
+    const int mb = rand() % 10;
     
     fprintf(stderr, "ma is %d, mb is %d, n is %d\n", ma, mb, n);
     float *XA = 0;
@@ -43,22 +46,19 @@ int main(int argc, char *argv[])
         Y = (float *)calloc(ma * mb, sizeof(float));
     
     for (int i = 0; i < ma * n; ++i)
-    {
         XA[i] = (float)rand() / RAND_MAX;
-    }
     
     FILE *fa = fopen("XA.bin", "wb");
     fwrite(XA, sizeof(float), ma * n, fa);
     fclose(fa);
     
     for (int i = 0; i < mb * n; ++i)
-    {
         XB[i] = (float)rand() / RAND_MAX;
-    }
     
     FILE *fb = fopen("XB.bin", "wb");
     fwrite(XB, sizeof(float), mb * n, fb);
     fclose(fb);
+    
     cdist(XA, ma, XB, mb, n, Y);
     
     FILE *fy = fopen("Y.bin", "wb");    
@@ -73,4 +73,6 @@ int main(int argc, char *argv[])
     
     if (Y)
         free(Y);
+    
+    return 0;
 }
