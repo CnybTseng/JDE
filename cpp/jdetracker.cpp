@@ -4,38 +4,42 @@
 
 namespace mot {
 
-JDETracker::JDETracker()
+JDETracker *JDETracker::me = NULL;
+
+bool JDETracker::init(void)
 {
-    
+    return true;
 }
 
-JDETracker::~JDETracker()
+bool JDETracker::update(const cv::Mat &dets)
 {
-    
-}
-
-static void cdist(float *XA, int ma, float *XB, int mb, int n, float **Y)
-{
-    for (int i = 0; i < ma; ++i)
+    ++timestamp;
+    std::vector<mot::Trajectory> candidates(dets.rows);
+    for (int i = 0; i < dets.rows; ++i)
     {
-        float *yi = Y + i * ma;
-        float *xa = XA + i * n;
-        for (int j = 0; j < mb; ++j)
-        {
-            float dist = 0;
-            float *xb = XB + j * n;
-            for (int k = 0; k < n; ++k)
-            {
-                dist += (xa[k] - xb[k]) * (xa[k] - xb[k]);
-            }
-            *(yi + j) = sqrt(dist);
-        }
+        cv::Vec4f ltrb;
+        float score = dets.at<float>(i, 1);
+        const cv::Mat &embedding = dets(cv::Rect(6, i, dets.cols - 6, 1));
+        candidates[i] = mot::Trajectory(ltrb, score, embedding);
     }
-}
-
-int JDETracker::update(float *dets, int dim, int cnt)
-{
+    
     return 0;
 }
 
+void JDETracker::free(void)
+{
+    
+}
+
 }   // namespace mot
+
+#ifdef TEST_JDETRACKER_MODULE
+
+int main()
+{
+    bool ret = mot::JDETracker::instance()->init();
+    mot::JDETracker::instance()->free();
+    return 0;
+}
+
+#endif

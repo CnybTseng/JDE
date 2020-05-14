@@ -12,7 +12,7 @@ namespace mot {
 
 LAPJV* LAPJV::me = 0;
 
-bool LAPJV::init()
+bool LAPJV::init(void)
 {
     Py_Initialize();
     check_error_goto(!Py_IsInitialized(), fail, "Py_Initialize fail!\n");
@@ -89,7 +89,7 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
 
 #undef lapjv_solve_clr_ret
 
-void LAPJV::free()
+void LAPJV::free(void)
 {
     Py_CLEAR(lapjv);
     Py_CLEAR(dict);
