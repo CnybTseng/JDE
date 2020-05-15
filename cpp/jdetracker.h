@@ -1,10 +1,14 @@
 #ifndef JDETRACKER_H
 #define JDETRACKER_H
 
+#include <map>
 #include <vector>
 #include <opencv2/opencv.hpp>
 
 #include "trajectory.h"
+
+typedef std::map<int, int> Match;
+typedef std::map<int, int>::iterator MatchIterator;
 
 namespace mot {
 
@@ -22,13 +26,18 @@ public:
     bool update(const cv::Mat &dets);
     void free(void);
 private:
-    JDETracker(void) : timestamp(0), max_lost_time(30) {}
+    JDETracker(void) : timestamp(0), max_lost_time(30), lambda(0.98f) {}
     ~JDETracker(void) {}
+    cv::Mat motion_distance(const TrajectoryPool &a, const TrajectoryPool &b);
+    void linear_assignment(const cv::Mat &cost, float cost_limit, Match &matches,
+        std::vector<int> &mismatch_row, std::vector<int> &mismatch_col);
 private:
     int timestamp;
-    std::vector<mot::Trajectory> tracked_trajectories;
-    std::vector<mot::Trajectory> lost_trajectories;
+    TrajectoryPool tracked_trajectories;
+    TrajectoryPool lost_trajectories;
+    TrajectoryPool removed_trajectories;
     int max_lost_time;
+    float lambda;
 };
 
 }   // namespace mot
