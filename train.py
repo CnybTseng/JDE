@@ -80,6 +80,7 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
     # widgets = ['Training epoch %d: ' % (epoch+1), Percentage(), ' ',
     #     Bar('#'), ' ', Timer(), ' ', ETA()]
     # pbar = ProgressBar(widgets=widgets, maxval=len(data_loader)).start()  
+    print(f'//////////////////////////////////epoch:{epoch}')
 
     optimizer.zero_grad()
     for batch_id, (images, targets) in enumerate(data_loader):
