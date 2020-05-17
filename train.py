@@ -102,7 +102,7 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
                     print(f'{k}:{v} ', end='')
                 else:
                     print(f'{k}:%.5f ' % v, end='')
-            print('LR:%e size:{size}' % lr_scheduler.get_lr()[0])       
+            print(f'LR:%e size:{size}' % lr_scheduler.get_lr()[0])       
         
         # pbar.update(batch_id + 1)
         size = scale_sampler(total_batches)
