@@ -6,6 +6,7 @@
 
 import os
 import torch
+import random
 import argparse
 import numpy as np
 import torch.utils.data
@@ -70,6 +71,13 @@ def parse_args():
         help='workspace path')
     args = parser.parse_args()
     return args
+
+def init_seeds(seed=0):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 def train_one_epoch(model, criterion, optimizer, lr_scheduler,
     data_loader, epoch, accumulated_batches, shared_size,
@@ -190,4 +198,5 @@ def train(args):
 
 if __name__ == '__main__':
     args = parse_args()
+    init_seeds()
     train(args)
