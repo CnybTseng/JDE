@@ -77,9 +77,9 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
 
     model.train()
     size = shared_size.numpy().tolist()
-    widgets = ['Training epoch %d: ' % (epoch+1), Percentage(), ' ',
-        Bar('#'), ' ', Timer(), ' ', ETA()]
-    pbar = ProgressBar(widgets=widgets, maxval=len(data_loader)).start()  
+    # widgets = ['Training epoch %d: ' % (epoch+1), Percentage(), ' ',
+    #     Bar('#'), ' ', Timer(), ' ', ETA()]
+    # pbar = ProgressBar(widgets=widgets, maxval=len(data_loader)).start()  
 
     optimizer.zero_grad()
     for batch_id, (images, targets) in enumerate(data_loader):
@@ -96,18 +96,19 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
             optimizer.zero_grad()
             lr_scheduler.step()
 
-        for k, v in metrics.items():
-            if isinstance(v, int):
-                print(f'{k}:{v} ', end='')
-            else:
-                print(f'{k}:%.5f ' % v, end='')
-        print('LR:%e' % lr_scheduler.get_lr()[0])       
+        if total_batches % 40 == 0:
+            for k, v in metrics.items():
+                if isinstance(v, int):
+                    print(f'{k}:{v} ', end='')
+                else:
+                    print(f'{k}:%.5f ' % v, end='')
+            print('LR:%e size:{size}' % lr_scheduler.get_lr()[0])       
         
-        pbar.update(batch_id + 1)
+        # pbar.update(batch_id + 1)
         size = scale_sampler(total_batches)
         shared_size = torch.from_numpy(np.ndarray(size))
     
-    pbar.finish()
+    # pbar.finish()
 
 def train(args):
     try:
