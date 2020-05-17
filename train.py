@@ -74,8 +74,7 @@ def parse_args():
 def train_one_epoch(model, criterion, optimizer, lr_scheduler,
     data_loader, epoch, accumulated_batches, shared_size,
     scale_sampler, device, sparsity=False, lamb=0.01):
-    
-    msgs = []
+
     model.train()
     size = shared_size.numpy().tolist()
     widgets = ['Training epoch %d: ' % (epoch+1), Percentage(), ' ',
@@ -96,14 +95,21 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
             optimizer.step()
             optimizer.zero_grad()
             lr_scheduler.step()
+
+        for metric in metrics:
+            for k, v in metric.items():
+                if isinstance(v, int):
+                    print(f'{k}:{v} ', end='')
+                else:
+                    print(f'{k}:%.5f ' % v, end='')
+            print('LR:%e' % lr_scheduler.get_lr()[0])
         
-        msgs.append((loss.detach().cpu().item(), metrics, lr_scheduler.get_lr()[0]))
+        
         pbar.update(batch_id + 1)
         size = scale_sampler(total_batches)
         shared_size = torch.from_numpy(np.ndarray(size))
     
     pbar.finish()
-    return msgs
 
 def train(args):
     try:
@@ -171,10 +177,9 @@ def train(args):
     print(f'{args}\nStart training from epoch {start_epoch}')
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
     for epoch in range(start_epoch, args.epochs):
-        msgs = train_one_epoch(model, criterion, optimizer, lr_scheduler,
+        train_one_epoch(model, criterion, optimizer, lr_scheduler,
             data_loader, epoch, args.accumulated_batches, shared_size,
             scale_sampler, device, args.sparsity, args.lamb)
-        utils.print_training_message(args.workspace, epoch + 1, msgs, args.batch_size)
         torch.save(model.state_dict(), f"{model_path}" % epoch)
         torch.save({'epoch' : epoch,
             'optimizer' : optimizer.state_dict(),

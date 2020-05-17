@@ -185,14 +185,16 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         for i, (lb, lc, li) in enumerate(zip(lbboxes, lclasss, lidents)):
             loss.append((torch.exp(-self.sbs[i]) * lb + torch.exp(-self.scs[i]) * lc + \
                 torch.exp(-self.sis[i]) * li + self.sbs[i] + self.scs[i] + self.sis[i]) * 0.5)
+        loss = sum(loss)
         
         # just for log        
-        metrics = []
+        metrics = {'LBOX':0, 'LCLA':0, 'LIDE':0, 'LOSS':loss.detach().cpu().item()}
         for lb, lc, li in zip(lbboxes, lclasss, lidents):
-            metrics.append({'LBOX':lb.detach().cpu().item(),
-                'LCLA':lc.detach().cpu().item(), 'LIDE':li.detach().cpu().item()})
+            metrics['LBOX'] += lb.detach().cpu().item()
+            metrics['LCLA'] += lc.detach().cpu().item()
+            metrics['LIDE'] += li.detach().cpu().item()
         
-        return sum(loss), metrics
+        return loss, metrics
     
     def _build_targets(self, n, targets, gsizes):
         '''build training targets.

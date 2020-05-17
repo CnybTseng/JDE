@@ -52,7 +52,7 @@ class DarkNet(torch.nn.Module):
     def __init__(self, num_classes=1, num_ids=0):
         super(DarkNet, self).__init__()
         self.num_classes = num_classes
-        self.momentum = 0.01
+        self.momentum = 0.1
         self.negative_slope = 0.1
         self.detection_channels = (5 + self.num_classes) * 4
         self.embedding_channels = 512
