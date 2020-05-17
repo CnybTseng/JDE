@@ -96,14 +96,12 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
             optimizer.zero_grad()
             lr_scheduler.step()
 
-        for metric in metrics:
-            for k, v in metric.items():
-                if isinstance(v, int):
-                    print(f'{k}:{v} ', end='')
-                else:
-                    print(f'{k}:%.5f ' % v, end='')
-            print('LR:%e' % lr_scheduler.get_lr()[0])
-        
+        for k, v in metrics.items():
+            if isinstance(v, int):
+                print(f'{k}:{v} ', end='')
+            else:
+                print(f'{k}:%.5f ' % v, end='')
+        print('LR:%e' % lr_scheduler.get_lr()[0])       
         
         pbar.update(batch_id + 1)
         size = scale_sampler(total_batches)
