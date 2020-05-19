@@ -28,9 +28,10 @@ public:
 private:
     JDETracker(void) : timestamp(0), max_lost_time(30), lambda(0.98f) {}
     virtual ~JDETracker(void) {}
-    cv::Mat motion_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
+    cv::Mat motion_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
     void linear_assignment(const cv::Mat &cost, float cost_limit, Match &matches,
         std::vector<int> &mismatch_row, std::vector<int> &mismatch_col);
+    void remove_duplicate_trajectory(TrajectoryPool &a, TrajectoryPool &b, float iou_thresh=0.15f);
 private:
     int timestamp;
     TrajectoryPool tracked_trajectories;

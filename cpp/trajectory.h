@@ -62,18 +62,23 @@ public:
     void reactivate(Trajectory &traj, int timestamp, bool newid=false);
     void mark_lost(void);
     void mark_removed(void);
-    int get_timestamp(void);
     friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPool &b);
+    friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPtrPool &b);
+    friend TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b);
+    friend TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
-    friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPool &b);
+    friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, TrajectoryPool &b);
     friend TrajectoryPtrPool operator-(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend cv::Mat embedding_distance(const TrajectoryPool &a, const TrajectoryPool &b);
     friend cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
+    friend cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
     friend cv::Mat mahalanobis_distance(const TrajectoryPool &a, const TrajectoryPool &b);
     friend cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
+    friend cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
     friend cv::Mat iou_distance(const TrajectoryPool &a, const TrajectoryPool &b);
     friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
+    friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
 public:
     TrajectoryState state;
 private:
@@ -91,6 +96,7 @@ public:
     int timestamp;
 private:
     int length;
+public:
     int starttime;
 private:   
     void update_embedding(const cv::Mat &embedding);
@@ -160,11 +166,6 @@ inline void Trajectory::mark_lost(void)
 inline void Trajectory::mark_removed(void)
 {
     state = Removed;
-}
-
-inline int Trajectory::get_timestamp(void)
-{
-    return timestamp;
 }
 
 }   // namespace mot

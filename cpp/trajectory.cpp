@@ -174,6 +174,47 @@ TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPool &b)
     return sum;
 }
 
+TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPtrPool &b)
+{
+    TrajectoryPool sum;
+    sum.insert(sum.end(), a.begin(), a.end());
+    
+    std::vector<int> ids(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+        ids[i] = a[i].id;
+    
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), b[i]->id);
+        if (iter == ids.end())
+        {
+            sum.push_back(*b[i]);
+            ids.push_back(b[i]->id);
+        }
+    }
+    
+    return sum;
+}
+
+TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b)
+{    
+    std::vector<int> ids(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+        ids[i] = a[i].id;
+    
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), b[i]->id);
+        if (iter == ids.end())
+        {
+            a.push_back(*b[i]);
+            ids.push_back(b[i]->id);
+        }
+    }
+    
+    return a;
+}
+
 TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b)
 {
     TrajectoryPool dif;
@@ -189,6 +230,25 @@ TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b)
     }
     
     return dif;
+}
+
+TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPool &b)
+{
+    std::vector<int> ids(b.size());
+    for (size_t i = 0; i < b.size(); ++i)
+        ids[i] = b[i].id;
+    
+    TrajectoryPoolIterator piter;
+    for (piter = a.begin(); piter != a.end(); )
+    {
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), piter->id);
+        if (iter == ids.end())
+            piter = a.erase(piter);
+        else
+            ++piter;
+    }
+    
+    return a;
 }
 
 TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b)
@@ -213,7 +273,7 @@ TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPtrPool 
     return sum;
 }
 
-TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPool &b)
+TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, TrajectoryPool &b)
 {
     TrajectoryPtrPool sum;
     sum.insert(sum.end(), a.begin(), a.end());
@@ -284,6 +344,22 @@ cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &
     return dists;
 }
 
+cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
+{
+    cv::Mat dists(a.size(), b.size(), CV_32F);
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        float *distsi = dists.ptr<float>(i);
+        for (size_t j = 0; j < b.size(); ++j)
+        {
+            double dist = cv::norm(a[i]->smooth_embedding, b[i].smooth_embedding, cv::NORM_L2);
+            distsi[j] = static_cast<float>(dist);
+        }
+    }
+    
+    return dists;
+}
+
 cv::Mat mahalanobis_distance(const TrajectoryPool &a, const TrajectoryPool &b)
 {
     std::vector<cv::Mat> means(a.size());
@@ -328,6 +404,32 @@ cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool
         for (size_t j = 0; j < b.size(); ++j)
         {
             const cv::Mat x(b[j]->xyah);
+            float dist = static_cast<float>(cv::Mahalanobis(x, means[i], icovariances[i]));
+            distsi[j] = dist * dist;
+        }
+    }
+    
+    return dists;
+}
+
+cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
+{
+    std::vector<cv::Mat> means(a.size());
+    std::vector<cv::Mat> icovariances(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        cv::Mat covariance;
+        a[i]->project(means[i], covariance);
+        cv::invert(covariance, icovariances[i]);
+    }
+    
+    cv::Mat dists(a.size(), b.size(), CV_32F);
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        float *distsi = dists.ptr<float>(i);
+        for (size_t j = 0; j < b.size(); ++j)
+        {
+            const cv::Mat x(b[j].xyah);
             float dist = static_cast<float>(cv::Mahalanobis(x, means[i], icovariances[i]));
             distsi[j] = dist * dist;
         }
@@ -406,6 +508,40 @@ cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b)
         for (size_t j = 0; j < b.size(); ++j)
         {
             const cv::Vec4f &boxb = b[j]->ltrb;
+            float inters = calc_inter_area(boxa, boxb);
+            distsi[j] = inters / (areaa[i] + areab[j] - inters);
+        }
+    }
+    
+    return dists;
+}
+
+cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
+{
+    std::vector<float> areaa(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        float w = a[i]->ltrb[2] - a[i]->ltrb[0];
+        float h = a[i]->ltrb[3] - a[i]->ltrb[1];
+        areaa[i] = w * h;
+    }
+    
+    std::vector<float> areab(b.size());
+    for (size_t j = 0; j < b.size(); ++j)
+    {
+        float w = b[j].ltrb[2] - b[j].ltrb[0];
+        float h = b[j].ltrb[3] - b[j].ltrb[1];
+        areab[j] = w * h;
+    }
+    
+    cv::Mat dists(a.size(), b.size(), CV_32F);
+    for (size_t i = 0; i < a.size(); ++i)
+    {
+        const cv::Vec4f &boxa = a[i]->ltrb;
+        float *distsi = dists.ptr<float>(i);
+        for (size_t j = 0; j < b.size(); ++j)
+        {
+            const cv::Vec4f &boxb = b[j].ltrb;
             float inters = calc_inter_area(boxa, boxb);
             distsi[j] = inters / (areaa[i] + areab[j] - inters);
         }
