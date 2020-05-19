@@ -131,7 +131,9 @@ def train(args):
     scale_sampler = utils.TrainScaleSampler(args.in_size, args.scale_step,
         args.rescale_freq)
     shared_size = torch.IntTensor(args.in_size).share_memory_()
-
+    
+    torch.backends.cudnn.benchmark = True
+    
     dataset = ds.CustomDataset(args.dataset, 'train')
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
