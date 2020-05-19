@@ -27,8 +27,8 @@ public:
     void free(void);
 private:
     JDETracker(void) : timestamp(0), max_lost_time(30), lambda(0.98f) {}
-    ~JDETracker(void) {}
-    cv::Mat motion_distance(const TrajectoryPool &a, const TrajectoryPool &b);
+    virtual ~JDETracker(void) {}
+    cv::Mat motion_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     void linear_assignment(const cv::Mat &cost, float cost_limit, Match &matches,
         std::vector<int> &mismatch_row, std::vector<int> &mismatch_col);
 private:

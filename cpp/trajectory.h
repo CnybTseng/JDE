@@ -16,7 +16,9 @@ typedef enum
 
 class Trajectory;
 typedef std::vector<Trajectory> TrajectoryPool;
-typedef std::vector<Trajectory> TrajectoryPoolIterator;
+typedef std::vector<Trajectory>::iterator TrajectoryPoolIterator;
+typedef std::vector<Trajectory *>TrajectoryPtrPool;
+typedef std::vector<Trajectory *>::iterator TrajectoryPtrPoolIterator;
 
 class TKalmanFilter : public cv::KalmanFilter
 {
@@ -63,9 +65,15 @@ public:
     int get_timestamp(void);
     friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b);
+    friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
+    friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPool &b);
+    friend TrajectoryPtrPool operator-(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend cv::Mat embedding_distance(const TrajectoryPool &a, const TrajectoryPool &b);
+    friend cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend cv::Mat mahalanobis_distance(const TrajectoryPool &a, const TrajectoryPool &b);
+    friend cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend cv::Mat iou_distance(const TrajectoryPool &a, const TrajectoryPool &b);
+    friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
 public:
     TrajectoryState state;
 private:
