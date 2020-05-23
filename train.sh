@@ -8,7 +8,7 @@ python train.py \
     --rescale-freq 99999999 \
     --workers 8 \
     --epochs 50 \
-    --lr 0.001 \
+    --lr 0.01 \
     --milestones 16625 24937 \
     --weight-decay 0.0001 \
     --savename jde \
