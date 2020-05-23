@@ -164,7 +164,7 @@ def train(
             # for ii, key in enumerate(model.module.loss_names):            
             #     rloss[key] = (rloss[key] * ui + components[ii]) / (ui + 1)
             for ii, key in enumerate(metrics.keys()):
-                rloss[key] = (rloss[key] * ui + metrics.values[ii]) / (ui + 1)
+                rloss[key] = (rloss[key] * ui + list(metrics.values())[ii]) / (ui + 1)
 
             # rloss indicates running loss values with mean updated at every epoch
             # s = ('%8s%12s' + '%10.3g' * 6) % (
