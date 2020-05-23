@@ -125,6 +125,7 @@ def train(
         optimizer.zero_grad()
         for i, (imgs, targets, _, _, targets_len) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
+                print('no obj')
                 continue
 
             # SGD burn-in
@@ -183,13 +184,13 @@ def train(
             # if i % opt.print_interval == 0:
             #     logger.info(s)
             
-            if i % opt.print_interval == 0:
-                for k, v in metrics.items():
-                    if isinstance(v, int):
-                        print(f'{k}:{v} ', end='')
-                    else:
-                        print(f'{k}:%.5f ' % v, end='')
-                print(f'LR:%e size:{size}' % lr_scheduler.get_lr()[0]) 
+            # if i % opt.print_interval == 0:
+            for k, v in metrics.items():
+                if isinstance(v, int):
+                    print(f'{k}:{v} ', end='')
+                else:
+                    print(f'{k}:%.5f ' % v, end='')
+            print(f'LR:%e size:{size}' % scheduler.get_lr()[0]) 
 
         # Save latest checkpoint
         # checkpoint = {'epoch': epoch,
