@@ -190,7 +190,7 @@ def train(
                     print(f'{k}:{v} ', end='')
                 else:
                     print(f'{k}:%.5f ' % v, end='')
-            print(f'LR:%e size:{size}' % scheduler.get_lr()[0]) 
+            print(f'LR:%e' % scheduler.get_lr()[0]) 
 
         # Save latest checkpoint
         # checkpoint = {'epoch': epoch,
