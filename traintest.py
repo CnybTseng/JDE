@@ -142,11 +142,11 @@ def train(
             # loss = torch.mean(loss)
             
             ttargets = []
-            for i,l in enumerate(targets_len):
+            for j,l in enumerate(targets_len):
                 if l > 0:
                     t = torch.zeros((int(l), 7))
-                    t[:,0] = i
-                    t[:,1:] = targets[i][:int(l)]
+                    t[:,0] = j
+                    t[:,1:] = targets[j][:int(l)]
                     ttargets.append(t)
             targets = torch.cat(ttargets, dim=0)
             
@@ -185,7 +185,7 @@ def train(
             # if i % opt.print_interval == 0:
             #     logger.info(s)
             
-            if i % opt.print_interval == 0:
+            if i % 10 == 0:
                 for k, v in metrics.items():
                     if isinstance(v, int):
                         print(f'{k}:{v} ', end='')
