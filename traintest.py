@@ -3,11 +3,8 @@ import json
 import time
 from time import gmtime, strftime
 import test
-# from models import *
+from models import *
 from shutil import copyfile
-import sys
-sys.path.append('./')
-sys.path.append('./utils')
 from utils.datasets import JointDataset, collate_fn
 from utils.utils import *
 from utils.log import logger
