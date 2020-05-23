@@ -180,8 +180,16 @@ def train(
                 rloss['LIDE'], rloss['LOSS'],
                 time.time() - t0)
             t0 = time.time()
+            # if i % opt.print_interval == 0:
+            #     logger.info(s)
+            
             if i % opt.print_interval == 0:
-                logger.info(s)
+                for k, v in metrics.items():
+                    if isinstance(v, int):
+                        print(f'{k}:{v} ', end='')
+                    else:
+                        print(f'{k}:%.5f ' % v, end='')
+                print(f'LR:%e size:{size}' % lr_scheduler.get_lr()[0]) 
 
         # Save latest checkpoint
         # checkpoint = {'epoch': epoch,
