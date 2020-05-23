@@ -75,13 +75,14 @@ def train(
 
     else:
         # Initialize model with backbone (optional)
-        if cfg.endswith('yolov3.cfg'):
-            load_darknet_weights(model, osp.join(weights_from, 'darknet53.conv.74'))
-            cutoff = 75
-        elif cfg.endswith('yolov3-tiny.cfg'):
-            load_darknet_weights(model, osp.join(weights_from, 'yolov3-tiny.conv.15'))
-            cutoff = 15
+        # if cfg.endswith('yolov3.cfg'):
+        #     load_darknet_weights(model, osp.join(weights_from, 'darknet53.conv.74'))
+        #     cutoff = 75
+        # elif cfg.endswith('yolov3-tiny.cfg'):
+        #     load_darknet_weights(model, osp.join(weights_from, 'yolov3-tiny.conv.15'))
+        #     cutoff = 15
 
+        model.load_state_dict(torch.load('workspace/task-2020-5-23/jde.pth'))
         model.cuda().train()
 
         # Set optimizer
