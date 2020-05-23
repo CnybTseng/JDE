@@ -185,13 +185,13 @@ def train(
             # if i % opt.print_interval == 0:
             #     logger.info(s)
             
-            # if i % opt.print_interval == 0:
-            for k, v in metrics.items():
-                if isinstance(v, int):
-                    print(f'{k}:{v} ', end='')
-                else:
-                    print(f'{k}:%.5f ' % v, end='')
-            print(f'LR:%e' % scheduler.get_lr()[0]) 
+            if i % opt.print_interval == 0:
+                for k, v in metrics.items():
+                    if isinstance(v, int):
+                        print(f'{k}:{v} ', end='')
+                    else:
+                        print(f'{k}:%.5f ' % v, end='')
+                print(f'LR:%e' % scheduler.get_lr()[0]) 
 
         # Save latest checkpoint
         # checkpoint = {'epoch': epoch,
