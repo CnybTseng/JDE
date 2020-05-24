@@ -92,7 +92,7 @@ def train(
     anchors = ((6,16),   (8,23),    (11,32),   (16,45),
                (21,64),  (30,90),   (43,128),  (60,180),
                (85,255), (120,360), (170,420), (340,320))
-    criterion = yolov3.YOLOv3Loss(1, anchors, dataset.nID, model.classifier).cuda().train()
+    criterion = yolov3.YOLOv3Loss(1, anchors, dataset.nID).cuda().train()
     classifier = torch.nn.Linear(512, dataset.nID) if dataset.nID > 0 else torch.nn.Sequential()
 
     model = torch.nn.DataParallel(model)
