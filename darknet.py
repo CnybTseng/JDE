@@ -153,7 +153,7 @@ class DarkNet(torch.nn.Module):
 
         '''Shared identifiers classifier'''
 
-        # self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
+        self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
 
         self.__init_weights()
     
