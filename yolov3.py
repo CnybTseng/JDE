@@ -115,11 +115,12 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         anchors:
         classifier:
     '''
-    def __init__(self, num_classes, anchors, num_idents, classifier=torch.nn.Sequential()):
+    # def __init__(self, num_classes, anchors, num_idents, classifier=torch.nn.Sequential()):
+    def __init__(self, num_classes, anchors, num_idents):
         super(YOLOv3Loss, self).__init__((608,1088), num_classes, anchors,
             embd_dim=512)
         self.num_idents = num_idents
-        self.classifier = classifier                                # embedding mapping to class logits
+        # self.classifier = classifier                                # embedding mapping to class logits
         self.sbs = [nn.Parameter(-4.85 * torch.ones(1)).cuda()] * 3        # location task uncertainty
         self.scs = [nn.Parameter(-4.15 * torch.ones(1)).cuda()] * 3        # classification task uncertainty
         self.sis = [nn.Parameter(-2.30 * torch.ones(1)).cuda()] * 3        # identification task uncertainty
@@ -134,7 +135,7 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         self.BoolTensor = torch.cuda.BoolTensor if \
             torch.cuda.is_available() else torch.BoolTensor
         
-    def forward(self, xs, targets, in_size):
+    def forward(self, xs, targets, in_size, classifier):
         '''YOLOv3Loss layer forward propagation
         
         Args:
@@ -177,7 +178,8 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         lidents = [self.FloatTensor([0])] * len(pembeds)
         for i, (pembed, tident) in enumerate(zip(pembeds, tidents)):
             if pembed.size(0) > 0:
-                pident = self.classifier(pembed).contiguous()                       # x*num_idents
+                # pident = self.classifier(pembed).contiguous()                       # x*num_idents
+                pident = classifier(pembed).contiguous()                       # x*num_idents
                 lidents[i] = self.iden_lossf(pident, tident)
         
         # total loss

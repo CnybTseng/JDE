@@ -93,6 +93,7 @@ def train(
                (21,64),  (30,90),   (43,128),  (60,180),
                (85,255), (120,360), (170,420), (340,320))
     criterion = yolov3.YOLOv3Loss(1, anchors, dataset.nID, model.classifier).cuda().train()
+    classifier = torch.nn.Linear(512, dataset.nID) if dataset.nID > 0 else torch.nn.Sequential()
 
     model = torch.nn.DataParallel(model)
     # Set scheduler
@@ -151,7 +152,7 @@ def train(
             targets = torch.cat(ttargets, dim=0)
             
             ys = model(imgs.cuda())
-            loss, metrics = criterion(ys, targets.cuda(), [576,320])
+            loss, metrics = criterion(ys, targets.cuda(), [576,320], classifier)
             
             loss.backward()
 
