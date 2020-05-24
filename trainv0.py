@@ -9,8 +9,7 @@ from utils.datasets import JointDataset, collate_fn
 from utils.utils import *
 from utils.log import logger
 from torchvision.transforms import transforms as T
-import yolov3
-import darknet
+
 
 def train(
         cfg,
@@ -52,8 +51,7 @@ def train(
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True,
                                              num_workers=8, pin_memory=True, drop_last=True, collate_fn=collate_fn)
     # Initialize model
-    # model = Darknet(cfg, dataset.nID)
-    model = darknet.DarkNet(num_classes=1, num_ids=dataset.nID)
+    model = Darknet(cfg, dataset.nID)
 
     cutoff = -1  # backbone reaches to cutoff layer
     start_epoch = 0
@@ -75,25 +73,18 @@ def train(
 
     else:
         # Initialize model with backbone (optional)
-        # if cfg.endswith('yolov3.cfg'):
-        #     load_darknet_weights(model, osp.join(weights_from, 'darknet53.conv.74'))
-        #     cutoff = 75
-        # elif cfg.endswith('yolov3-tiny.cfg'):
-        #     load_darknet_weights(model, osp.join(weights_from, 'yolov3-tiny.conv.15'))
-        #     cutoff = 15
+        if cfg.endswith('yolov3.cfg'):
+            load_darknet_weights(model, osp.join(weights_from, 'darknet53.conv.74'))
+            cutoff = 75
+        elif cfg.endswith('yolov3-tiny.cfg'):
+            load_darknet_weights(model, osp.join(weights_from, 'yolov3-tiny.conv.15'))
+            cutoff = 15
 
-        model.load_state_dict(torch.load('workspace/task-2020-5-23/jde.pth'))
         model.cuda().train()
 
         # Set optimizer
         optimizer = torch.optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=opt.lr, momentum=.9,
                                     weight_decay=1e-4)
-
-    anchors = ((6,16),   (8,23),    (11,32),   (16,45),
-               (21,64),  (30,90),   (43,128),  (60,180),
-               (85,255), (120,360), (170,420), (340,320))
-    criterion = yolov3.YOLOv3Loss(1, anchors, dataset.nID).cuda().train()
-    classifier = torch.nn.Linear(512, dataset.nID).cuda() if dataset.nID > 0 else torch.nn.Sequential().cuda()
 
     model = torch.nn.DataParallel(model)
     # Set scheduler
@@ -104,10 +95,7 @@ def train(
     # An important trick for detection: freeze bn during fine-tuning
     if not opt.unfreeze_bn:
         for i, (name, p) in enumerate(model.named_parameters()):
-            # p.requires_grad = False if 'batch_norm' in name else True
-            p.requires_grad = False if 'norm' in name else True
-            if 'norm' in name:
-                print('freeze {}'.format(name))
+            p.requires_grad = False if 'batch_norm' in name else True
 
     # model_info(model)
     t0 = time.time()
@@ -127,7 +115,6 @@ def train(
         optimizer.zero_grad()
         for i, (imgs, targets, _, _, targets_len) in enumerate(dataloader):
             if sum([len(x) for x in targets]) < 1:  # if no targets continue
-                print('no obj')
                 continue
 
             # SGD burn-in
@@ -138,22 +125,9 @@ def train(
                     g['lr'] = lr
 
             # Compute loss, compute gradient, update parameters
-            # loss, components = model(imgs.cuda(), targets.cuda(), targets_len.cuda())
-            # components = torch.mean(components.view(-1, 5), dim=0)
-            # loss = torch.mean(loss)
-            
-            ttargets = []
-            for j,l in enumerate(targets_len):
-                if l > 0:
-                    t = torch.zeros((int(l), 7))
-                    t[:,0] = j
-                    t[:,1:] = targets[j][:int(l)]
-                    ttargets.append(t)
-            targets = torch.cat(ttargets, dim=0)
-            
-            ys = model(imgs.cuda())
-            loss, metrics = criterion(ys, targets.cuda(), [576,320], classifier)
-            
+            loss, components = model(imgs.cuda(), targets.cuda(), targets_len.cuda())
+            components = torch.mean(components.view(-1, 5), dim=0)
+            loss = torch.mean(loss)
             loss.backward()
 
             # accumulate gradient for x batches before optimizing
@@ -164,41 +138,24 @@ def train(
             # Running epoch-means of tracked metrics
             ui += 1
 
-            # for ii, key in enumerate(model.module.loss_names):            
-            #     rloss[key] = (rloss[key] * ui + components[ii]) / (ui + 1)
-            for ii, key in enumerate(metrics.keys()):
-                rloss[key] = (rloss[key] * ui + list(metrics.values())[ii]) / (ui + 1)
+            for ii, key in enumerate(model.module.loss_names):
+                rloss[key] = (rloss[key] * ui + components[ii]) / (ui + 1)
 
             # rloss indicates running loss values with mean updated at every epoch
-            # s = ('%8s%12s' + '%10.3g' * 6) % (
-            #     '%g/%g' % (epoch, epochs - 1),
-            #     '%g/%g' % (i, len(dataloader) - 1),
-            #     rloss['box'], rloss['conf'],
-            #     rloss['id'], rloss['loss'],
-            #     rloss['nT'], time.time() - t0)
-            s = ('%8s%12s' + '%10.3g' * 5) % (
+            s = ('%8s%12s' + '%10.3g' * 6) % (
                 '%g/%g' % (epoch, epochs - 1),
                 '%g/%g' % (i, len(dataloader) - 1),
-                rloss['LBOX'], rloss['LCLA'],
-                rloss['LIDE'], rloss['LOSS'],
-                time.time() - t0)
+                rloss['box'], rloss['conf'],
+                rloss['id'], rloss['loss'],
+                rloss['nT'], time.time() - t0)
             t0 = time.time()
             if i % opt.print_interval == 0:
                 logger.info(s)
-            
-            # if i % opt.print_interval == 0:
-            #     for k, v in metrics.items():
-            #         if isinstance(v, int):
-            #             print(f'{k}:{v} ', end='')
-            #         else:
-            #             print(f'{k}:%.5f ' % v, end='')
-            #     print(f'LR:%e' % scheduler.get_last_lr()[0]) 
 
         # Save latest checkpoint
-        # checkpoint = {'epoch': epoch,
-        #               'model': model.module.state_dict(),
-        #               'optimizer': optimizer.state_dict()}
-        checkpoint = model.module.state_dict()
+        checkpoint = {'epoch': epoch,
+                      'model': model.module.state_dict(),
+                      'optimizer': optimizer.state_dict()}
 
         # copyfile(cfg, weights_to + '/cfg/yolo3.cfg')
         # copyfile(data_cfg, weights_to + '/cfg/ccmcpe.json')
@@ -207,7 +164,7 @@ def train(
         torch.save(checkpoint, latest)
         if epoch % save_every == 0 and epoch != 0:
             # making the checkpoint lite
-            # checkpoint["optimizer"] = []
+            checkpoint["optimizer"] = []
             torch.save(checkpoint, osp.join(weights_to, "weights_epoch_" + str(epoch) + ".pt"))
 
         # Calculate mAP
