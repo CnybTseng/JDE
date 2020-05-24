@@ -13,4 +13,4 @@ python train.py \
     --weight-decay 0.0001 \
     --savename jde \
     --pin \
-    --workspace workspace/task-2020-5-23/
+    --workspace workspace/task-2020-5-24/
