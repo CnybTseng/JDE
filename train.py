@@ -79,7 +79,7 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def train_one_epoch(model, criterion, optimizer, lr_scheduler,
+def train_one_epoch(model, criterion, classifier, optimizer, lr_scheduler,
     data_loader, epoch, accumulated_batches, shared_size,
     scale_sampler, device, sparsity=False, lamb=0.01):
 
@@ -93,7 +93,7 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
     optimizer.zero_grad()
     for batch_id, (images, targets) in enumerate(data_loader):
         ys = model(images.to(device))
-        loss, metrics = criterion(ys, targets.to(device), size)
+        loss, metrics = criterion(ys, targets.to(device), size, classifier)
         loss.backward()
         
         if sparsity:
@@ -111,7 +111,7 @@ def train_one_epoch(model, criterion, optimizer, lr_scheduler,
                     print(f'{k}:{v} ', end='')
                 else:
                     print(f'{k}:%.5f ' % v, end='')
-            print(f'LR:%e size:{size}' % lr_scheduler.get_lr()[0])       
+            print(f'LR:%e size:{size}' % lr_scheduler.get_last_lr()[0])       
         
         # pbar.update(batch_id + 1)
         size = scale_sampler(total_batches)
@@ -145,7 +145,8 @@ def train(args):
         print(f'load {args.checkpoint}')
         model.load_state_dict(torch.load(args.checkpoint))    
         
-    criterion = yolov3.YOLOv3Loss(args.num_classes, anchors, num_ids, model.classifier).to(device)
+    criterion = yolov3.YOLOv3Loss(args.num_classes, anchors, num_ids).to(device)
+    classifier = torch.nn.Linear(512, num_ids).cuda() if num_ids > 0 else torch.nn.Sequential().cuda()
     
     params = [p for p in model.parameters() if p.requires_grad]
     if args.optim == 'sgd':
@@ -187,7 +188,7 @@ def train(args):
     print(f'{args}\nStart training from epoch {start_epoch}')
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
     for epoch in range(start_epoch, args.epochs):
-        train_one_epoch(model, criterion, optimizer, lr_scheduler,
+        train_one_epoch(model, criterion, classifier, optimizer, lr_scheduler,
             data_loader, epoch, args.accumulated_batches, shared_size,
             scale_sampler, device, args.sparsity, args.lamb)
         torch.save(model.state_dict(), f"{model_path}" % epoch)
