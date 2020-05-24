@@ -185,7 +185,7 @@ def train(
             # if i % opt.print_interval == 0:
             #     logger.info(s)
             
-            if i % 10 == 0:
+            if i % opt.print_interval == 0:
                 for k, v in metrics.items():
                     if isinstance(v, int):
                         print(f'{k}:{v} ', end='')
