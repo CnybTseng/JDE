@@ -6,8 +6,8 @@ namespace mot {
 
 void TKalmanFilter::init(const cv::Mat &measurement)
 {
-    measurement.copyTo(statePost(cv::Rect(0, 0, 4, 1)));
-    statePost(cv::Rect(0, 4, 4, 1)).setTo(0);
+    measurement.copyTo(statePost(cv::Rect(0, 0, 1, 4)));
+    statePost(cv::Rect(0, 4, 1, 4)).setTo(0);
     statePost.copyTo(statePre);
 
     float varpos = 2 *  std_weight_position * (*measurement.ptr<float>(3));
@@ -72,7 +72,7 @@ void TKalmanFilter::project(cv::Mat &mean, cv::Mat &covariance) const
     *measurementNoiseCov_.ptr<float>(2, 2) = 1e-2f;
     *measurementNoiseCov_.ptr<float>(3, 3) = varpos;
         
-    mean = measurementMatrix.dot(statePost);
+    mean = measurementMatrix * statePost;
     cv::Mat temp = measurementMatrix * errorCovPost;
     gemm(temp, measurementMatrix, 1, measurementNoiseCov_, 1, covariance, cv::GEMM_2_T);
 }
@@ -122,7 +122,7 @@ void Trajectory::update(Trajectory &traj, int timestamp_, bool update_embedding_
 
 void Trajectory::activate(int timestamp_)
 {
-    id = next_id();    
+    id = next_id();
     TKalmanFilter::init(cv::Mat(xyah));    
     length = 0;
     state = Tracked;
@@ -146,9 +146,13 @@ void Trajectory::update_embedding(const cv::Mat &embedding)
 {
     current_embedding = embedding / cv::norm(embedding);
     if (smooth_embedding.empty())
+    {
         smooth_embedding = current_embedding;
+    }
     else
+    {
         smooth_embedding = eta * smooth_embedding + (1 - eta) * current_embedding;
+    }
     smooth_embedding = smooth_embedding / cv::norm(smooth_embedding);
 }
 
@@ -204,6 +208,8 @@ TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b)
     
     for (size_t i = 0; i < b.size(); ++i)
     {
+        if (b[i]->smooth_embedding.empty())
+            continue;
         std::vector<int>::iterator iter = find(ids.begin(), ids.end(), b[i]->id);
         if (iter == ids.end())
         {
@@ -243,9 +249,9 @@ TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPool &b)
     {
         std::vector<int>::iterator iter = find(ids.begin(), ids.end(), piter->id);
         if (iter == ids.end())
-            piter = a.erase(piter);
-        else
             ++piter;
+        else
+            piter = a.erase(piter);
     }
     
     return a;
@@ -320,7 +326,7 @@ cv::Mat embedding_distance(const TrajectoryPool &a, const TrajectoryPool &b)
         float *distsi = dists.ptr<float>(i);
         for (size_t j = 0; j < b.size(); ++j)
         {
-            double dist = cv::norm(a[i].smooth_embedding, b[i].smooth_embedding, cv::NORM_L2);
+            double dist = cv::norm(a[i].smooth_embedding, b[j].smooth_embedding, cv::NORM_L2);
             distsi[j] = static_cast<float>(dist);
         }
     }
@@ -336,7 +342,7 @@ cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &
         float *distsi = dists.ptr<float>(i);
         for (size_t j = 0; j < b.size(); ++j)
         {
-            double dist = cv::norm(a[i]->smooth_embedding, b[i]->smooth_embedding, cv::NORM_L2);
+            double dist = cv::norm(a[i]->smooth_embedding, b[j]->smooth_embedding, cv::NORM_L2);
             distsi[j] = static_cast<float>(dist);
         }
     }
@@ -352,7 +358,7 @@ cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
         float *distsi = dists.ptr<float>(i);
         for (size_t j = 0; j < b.size(); ++j)
         {
-            double dist = cv::norm(a[i]->smooth_embedding, b[i].smooth_embedding, cv::NORM_L2);
+            double dist = cv::norm(a[i]->smooth_embedding, b[j].smooth_embedding, cv::NORM_L2);
             distsi[j] = static_cast<float>(dist);
         }
     }
@@ -475,7 +481,7 @@ cv::Mat iou_distance(const TrajectoryPool &a, const TrajectoryPool &b)
         {
             const cv::Vec4f &boxb = b[j].ltrb;
             float inters = calc_inter_area(boxa, boxb);
-            distsi[j] = inters / (areaa[i] + areab[j] - inters);
+            distsi[j] = 1.f - inters / (areaa[i] + areab[j] - inters);
         }
     }
     
@@ -509,7 +515,7 @@ cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b)
         {
             const cv::Vec4f &boxb = b[j]->ltrb;
             float inters = calc_inter_area(boxa, boxb);
-            distsi[j] = inters / (areaa[i] + areab[j] - inters);
+            distsi[j] = 1.f - inters / (areaa[i] + areab[j] - inters);
         }
     }
     
@@ -543,7 +549,7 @@ cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
         {
             const cv::Vec4f &boxb = b[j].ltrb;
             float inters = calc_inter_area(boxa, boxb);
-            distsi[j] = inters / (areaa[i] + areab[j] - inters);
+            distsi[j] = 1.f - inters / (areaa[i] + areab[j] - inters);
         }
     }
     
@@ -551,29 +557,3 @@ cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
 }
 
 }   // namespace mot
-
-#ifdef TEST_TRAJECTORY_MODULE
-
-#include <time.h>
-#include <iostream>
-
-int main(void)
-{
-    mot::TKalmanFilter tkf;
-    
-    cv::RNG rng(time(NULL));
-    cv::Mat measurement(4, 1, CV_32F);
-    rng.fill(measurement, cv::RNG::UNIFORM, cv::Scalar(0), cv::Scalar(5));
-    std::cout << measurement << std::endl;
-    
-    tkf.init(measurement);    
-    tkf.predict();
-
-    rng.fill(measurement, cv::RNG::UNIFORM, cv::Scalar(0), cv::Scalar(5));
-    cv::Mat state = tkf.correct(measurement);
-    std::cout << state << std::endl;
-    
-    return 0;
-}
-
-#endif // TEST_TRAJECTORY_MODULE

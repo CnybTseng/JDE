@@ -11,19 +11,14 @@ namespace mot {
 
 class LAPJV
 {
-private:
-    static LAPJV *me;
 public:
-    static LAPJV *instance(void) {
-        if (!me)
-            me = new LAPJV();
-        return me;
-    }
+    static LAPJV *instance(void);
     bool init(void);
     bool solve(const float *cost, int rows, int cols, float *opt, int *x,
         int *y, bool extend_cost=false, float cost_limit=FLT_MAX);
     void free(void);
 private:
+    static LAPJV *me;
     PyObject *module = 0;
     PyObject *dict = 0;
     PyObject *lapjv = 0;

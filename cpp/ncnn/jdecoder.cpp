@@ -270,10 +270,10 @@ int JDEcoder::forward(const std::vector<Mat>& bottom_blobs, std::vector<Mat>& to
         float* ptr = top_blob.row(i);
         ptr[0] = static_cast<float>(det.category + 1);
         ptr[1] = det.score;
-        ptr[2] = det.bbox.top;
-        ptr[3] = det.bbox.left;
-        ptr[4] = det.bbox.bottom;
-        ptr[5] = det.bbox.right;
+        ptr[2] = det.bbox.left;
+        ptr[3] = det.bbox.top;
+        ptr[4] = det.bbox.right;
+        ptr[5] = det.bbox.bottom;
         memcpy(ptr + 6, det.embedding, sizeof(det.embedding));
     }
     

@@ -9,14 +9,7 @@
 #   include "gpu.h"
 #endif  // NCNN_VULKAN
 
-struct Detection
-{
-    cv::Rect_<float> rect;
-    int category;
-    float score;
-};
-
-static void calcbbox(float *x1y1x2y2, int imw, int imh, int niw, int nih)
+static void correct_bbox(float *ltrb, int imw, int imh, int niw, int nih)
 {
     int dx = 0;
     int dy = 0;
@@ -44,15 +37,15 @@ static void calcbbox(float *x1y1x2y2, int imw, int imh, int niw, int nih)
     sx = _niw / niw;
     sy = _nih / nih;
     
-    x1 = static_cast<int>(sx * x1y1x2y2[0] - dx + .5f);
-    y1 = static_cast<int>(sy * x1y1x2y2[1] - dy + .5f);
-    x2 = static_cast<int>(sx * x1y1x2y2[2] - dx + .5f);
-    y2 = static_cast<int>(sy * x1y1x2y2[3] - dy + .5f);
+    x1 = static_cast<int>(sx * ltrb[0] - dx + .5f);
+    y1 = static_cast<int>(sy * ltrb[1] - dy + .5f);
+    x2 = static_cast<int>(sx * ltrb[2] - dx + .5f);
+    y2 = static_cast<int>(sy * ltrb[3] - dy + .5f);
 
-    x1y1x2y2[0] = std::max<int>(x1, 0);
-    x1y1x2y2[1] = std::max<int>(y1, 0);
-    x1y1x2y2[2] = std::min<int>(x2, imw - 1);
-    x1y1x2y2[3] = std::min<int>(y2, imh - 1);
+    ltrb[0] = std::max<int>(x1, 0);
+    ltrb[1] = std::max<int>(y1, 0);
+    ltrb[2] = std::min<int>(x2, imw - 1);
+    ltrb[3] = std::min<int>(y2, imh - 1);
 }
 
 int main(int argc, char *argv[])
@@ -105,20 +98,15 @@ int main(int argc, char *argv[])
         
         ncnn::Mat out;
         ext.extract("detout", out);
-        
-        std::vector<Detection> dets;
+
         for (int i = 0; i < out.h; ++i)
         {
-            const float* val = out.row(i);
-            Detection det;
-            det.category = static_cast<int>(val[0]);
-            det.score = val[1];
-            float x1y1x2y2[4] = {val[3], val[2], val[5], val[4]};
-            calcbbox(x1y1x2y2, bgr.cols, bgr.rows, netw, neth);
-            int l = static_cast<int>(x1y1x2y2[0]);
-            int t = static_cast<int>(x1y1x2y2[1]);
-            int r = static_cast<int>(x1y1x2y2[2]);
-            int b = static_cast<int>(x1y1x2y2[3]);
+            float* val = out.row(i);
+            correct_bbox(val + 2, bgr.cols, bgr.rows, netw, neth);
+            int l = static_cast<int>(val[2]);
+            int t = static_cast<int>(val[3]);
+            int r = static_cast<int>(val[4]);
+            int b = static_cast<int>(val[5]);
             cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), cv::Scalar(0, 255, 255), 2);
         }
     }    

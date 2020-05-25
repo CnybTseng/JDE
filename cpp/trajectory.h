@@ -47,8 +47,6 @@ inline TKalmanFilter::TKalmanFilter(void) : cv::KalmanFilter(8, 4)
 
 class Trajectory : public TKalmanFilter
 {
-private:
-    static int count;
 public:
     Trajectory();
     Trajectory(cv::Vec4f &ltrb, float score, const cv::Mat &embedding);
@@ -79,27 +77,23 @@ public:
     friend cv::Mat iou_distance(const TrajectoryPool &a, const TrajectoryPool &b);
     friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
+private:   
+    void update_embedding(const cv::Mat &embedding);
 public:
     TrajectoryState state;
-private:
     cv::Vec4f ltrb;
+    cv::Mat smooth_embedding;
+    int id;
+    bool is_activated;
+    int timestamp;
+    int starttime;
+private:
+    static int count;
     cv::Vec4f xyah;
     float score;
     cv::Mat current_embedding;
-    cv::Mat smooth_embedding;
-    int id;
-public:
-    bool is_activated;
-private:
     float eta;
-public:
-    int timestamp;
-private:
     int length;
-public:
-    int starttime;
-private:   
-    void update_embedding(const cv::Mat &embedding);
 };
 
 inline cv::Vec4f ltrb2xyah(cv::Vec4f &ltrb)
@@ -113,42 +107,43 @@ inline cv::Vec4f ltrb2xyah(cv::Vec4f &ltrb)
 }
 
 inline Trajectory::Trajectory() :
-    state(New), ltrb(cv::Vec4f()), score(0), smooth_embedding(cv::Mat()), id(0),
-    is_activated(false), eta(0.9), timestamp(0), length(0), starttime(0)
+    state(New), ltrb(cv::Vec4f()), smooth_embedding(cv::Mat()), id(0),
+    is_activated(false), timestamp(0), starttime(0), score(0), eta(0.9), length(0)
 {
 }
 
 inline Trajectory::Trajectory(cv::Vec4f &ltrb_, float score_, const cv::Mat &embedding) :
-    state(New), ltrb(ltrb_), score(score_), smooth_embedding(cv::Mat()), id(0),
-    is_activated(false), eta(0.9), timestamp(0), length(0), starttime(0)
+    state(New), ltrb(ltrb_), smooth_embedding(cv::Mat()), id(0),
+    is_activated(false), timestamp(0), starttime(0), score(score_), eta(0.9), length(0)
 {
     xyah = ltrb2xyah(ltrb);
     update_embedding(embedding);
 }
 
 inline Trajectory::Trajectory(const Trajectory &other):
-    state(other.state), ltrb(other.ltrb), xyah(other.xyah), score(other.score),
-    id(other.id), is_activated(other.is_activated), eta(other.eta), timestamp(other.timestamp),
-    length(other.length), starttime(other.starttime)
-{
-    other.current_embedding.copyTo(current_embedding);
+    state(other.state), ltrb(other.ltrb), id(other.id), is_activated(other.is_activated),
+    timestamp(other.timestamp), starttime(other.starttime), xyah(other.xyah),
+    score(other.score), eta(other.eta), length(other.length)
+{    
     other.smooth_embedding.copyTo(smooth_embedding);
+    other.current_embedding.copyTo(current_embedding);
 }
 
 inline Trajectory &Trajectory::operator=(const Trajectory &rhs)
 {
     this->state = rhs.state;
     this->ltrb = rhs.ltrb;
-    this->xyah = rhs.xyah;
-    this->score = rhs.score;
-    rhs.current_embedding.copyTo(this->current_embedding);
     rhs.smooth_embedding.copyTo(this->smooth_embedding);
     this->id = rhs.id;
     this->is_activated = rhs.is_activated;
-    this->eta = rhs.eta;
     this->timestamp = rhs.timestamp;
+    this->starttime = rhs.starttime; 
+    this->xyah = rhs.xyah;
+    this->score = rhs.score;
+    rhs.current_embedding.copyTo(this->current_embedding);            
+    this->eta = rhs.eta;    
     this->length = rhs.length;
-    this->starttime = rhs.starttime;    
+    
     return *this;
 }
 

@@ -82,7 +82,7 @@ def train(
         #     load_darknet_weights(model, osp.join(weights_from, 'yolov3-tiny.conv.15'))
         #     cutoff = 15
 
-        model.load_state_dict(torch.load('workspace/task-2020-5-23/jde.pth'))
+        model.load_state_dict(torch.load('workspace/mot16-2020-5-25/jde.pth'))
         model.cuda().train()
 
         # Set optimizer
@@ -95,7 +95,7 @@ def train(
     criterion = yolov3.YOLOv3Loss(1, anchors, dataset.nID).cuda().train()
     classifier = torch.nn.Linear(512, dataset.nID).cuda() if dataset.nID > 0 else torch.nn.Sequential().cuda()
 
-    model = torch.nn.DataParallel(model)
+    # model = torch.nn.DataParallel(model)
     # Set scheduler
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                      milestones=[int(0.5 * opt.epochs), int(0.75 * opt.epochs)],
@@ -143,12 +143,11 @@ def train(
             # loss = torch.mean(loss)
             
             ttargets = []
-            for j,l in enumerate(targets_len):
-                if l > 0:
-                    t = torch.zeros((int(l), 7))
-                    t[:,0] = j
-                    t[:,1:] = targets[j][:int(l)]
-                    ttargets.append(t)
+            for j, l in enumerate(targets_len):
+                t = torch.zeros((int(l), 7))
+                t[:, 0] = j
+                t[:, 1:] = targets[j][:int(l)]
+                ttargets.append(t)
             targets = torch.cat(ttargets, dim=0)
             
             ys = model(imgs.cuda())
@@ -198,7 +197,7 @@ def train(
         # checkpoint = {'epoch': epoch,
         #               'model': model.module.state_dict(),
         #               'optimizer': optimizer.state_dict()}
-        checkpoint = model.module.state_dict()
+        checkpoint = model.state_dict()
 
         # copyfile(cfg, weights_to + '/cfg/yolo3.cfg')
         # copyfile(data_cfg, weights_to + '/cfg/ccmcpe.json')

@@ -12,6 +12,13 @@ namespace mot {
 
 LAPJV* LAPJV::me = 0;
 
+LAPJV *LAPJV::instance(void)
+{
+    if (!me)
+        me = new LAPJV();
+    return me;
+}
+
 bool LAPJV::init(void)
 {
     Py_Initialize();
