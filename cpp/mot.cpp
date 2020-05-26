@@ -1,13 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <errno.h>
-#include <unistd.h>
 #include <vector>
 #include <opencv2/opencv.hpp>
 
+#include "yaml-cpp/yaml.h"
 #include "platform.h"
 #include "net.h"
 
@@ -17,16 +11,98 @@
 
 #include "jdetracker.h"
 
+#include "SH_ImageAlgLogSystem.h"
+
+/* 判断yaml指定节点定义且定义为指定类型 */
+#define __yaml_node_is_defined_as_type(node, type)  \
+do {                                                \
+    if (!node.IsDefined())                          \
+    {                                               \
+        LogError(#node " isn't defined");           \
+        return -1;                               \
+    }                                               \
+    if (!node.Is##type())                           \
+    {                                               \
+        LogError(#node " isn't " #type);            \
+        return -1;                               \
+    }                                               \
+} while (0)
+
+/*****************************************************************************
+ 函 数 名  : yaml_node_is_defined_as_type
+ 功能描述  : 判断yaml指定节点定义且定义为指定类型
+ 输入参数  : node  
+             type  
+ 输出参数  : 无
+ 返 回 值  : #define
+ 调用函数  : 
+ 被调函数  : 
+ 
+ 修改历史      :
+  1.日    期   : 2020年3月12日
+    作    者   : Zeng Zhiwei
+    修改内容   : 新生成函数
+
+*****************************************************************************/
+#define yaml_node_is_defined_as_type(node, type) __yaml_node_is_defined_as_type(node, type)
+
 namespace mot {
 
 static struct
 {
     int netw = 576;
     int neth = 320;
+    std::string param_path;
+    std::string bin_path;
     ncnn::Net *jde;
+    std::vector<std::string> categories;
     float means[3] = {0.f, 0.f, 0.f};
     float norms[3] = {0.0039215686f, 0.0039215686f, 0.0039215686f};
 } __model;
+
+static int load_config(const char *cfg_path)
+{
+    try
+    {
+        YAML::Node root = YAML::LoadFile(cfg_path);
+        if (!root["MOT"].IsDefined())
+        {
+            LogError("MOT isn't defined");
+            return -1;
+        }
+        
+        YAML::Node mot = root["MOT"];       
+        yaml_node_is_defined_as_type(mot["netw"], Scalar);
+        __model.netw = mot["netw"].as<int>();
+        
+        yaml_node_is_defined_as_type(mot["neth"], Scalar);
+        __model.neth = mot["neth"].as<int>();
+        
+        yaml_node_is_defined_as_type(mot["param_path"], Scalar);
+        __model.param_path = mot["param_path"].as<std::string>();
+        
+        yaml_node_is_defined_as_type(mot["bin_path"], Scalar);
+        __model.bin_path = mot["bin_path"].as<std::string>();
+        
+        yaml_node_is_defined_as_type(mot["categories"], Sequence);
+        __model.categories = mot["categories"].as<std::vector<std::string>>();
+        
+        yaml_node_is_defined_as_type(mot["mean_vals"], Sequence);
+        std::vector<float> mean_vals = mot["mean_vals"].as<std::vector<float>>();
+        std::copy(mean_vals.begin(), mean_vals.end(), __model.means);
+        
+        yaml_node_is_defined_as_type(mot["norm_vals"], Sequence);
+        std::vector<float> norm_vals = mot["norm_vals"].as<std::vector<float>>();
+        std::copy(norm_vals.begin(), norm_vals.end(), __model.norms);
+    }
+    catch (...)
+    {
+        LogError("invalid yaml configuration file");
+        return -1;
+    }
+   
+    return 0;
+}
 
 static void correct_bbox(float *ltrb, int imw, int imh, int niw, int nih)
 {
@@ -79,10 +155,20 @@ int load_mot_model(const char *cfg_path)
     __model.jde->opt.use_vulkan_compute = true;
 #endif  // NCNN_VULKAN
     
-    __model.jde->load_param("../baseline.param");
-    __model.jde->load_model("../baseline.bin");
+    if (load_config(cfg_path))
+    {
+        LogError("load_config() fail");
+        return -1;
+    }
     
-    JDETracker::instance()->init();
+    __model.jde->load_param(__model.param_path.c_str());
+    __model.jde->load_model(__model.bin_path.c_str());
+    
+    if (!JDETracker::instance()->init())
+    {
+        LogError("JDETracker::instance()->init() fail");
+        return -1;
+    }
     
     return 0;
 }
@@ -123,31 +209,39 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
     cv::Mat dets(out.h, out.w, CV_32FC1, out.data);
     JDETracker::instance()->update(dets, tracks);
     
-    for (size_t i = 0; i < tracks.size(); ++i)
+    std::vector<MOT_Track>::iterator riter;
+    for (riter = result.begin(); riter != result.end();)
     {
         bool match = false;
-        for (size_t j = 0; j < result.size(); ++j)
+        std::vector<mot::Track>::iterator titer;
+        for (titer = tracks.begin(); titer != tracks.end(); )
         {
-            if (result[j].identifier == tracks[i].id)
+            if (riter->identifier == titer->id)
             {
                 MOT_Rect rect = {
-                    .top = tracks[i].ltrb[1],
-                    .left = tracks[i].ltrb[0],
-                    .bottom = tracks[i].ltrb[3],
-                    .right = tracks[i].ltrb[2]};
-                result[j].rects.push_front(rect);
+                    .top = titer->ltrb[1],
+                    .left = titer->ltrb[0],
+                    .bottom = titer->ltrb[3],
+                    .right = titer->ltrb[2]};
+                riter->rects.push_front(rect);
+                titer = tracks.erase(titer);
                 match = true;
-                break;
             }
+            else
+                titer++;
         }
-        
         if (match)
-            continue;
-        
+            riter++;
+        else
+            riter = result.erase(riter);
+    }
+    
+    for (size_t i = 0; i < tracks.size(); ++i)
+    {
         MOT_Track track = {
             .identifier = tracks[i].id,
             .posture = STANDING,
-            .category = std::string("")};
+            .category = std::string(__model.categories[0])};
         track.rects.resize(30);
         result.push_back(track);
     }
@@ -155,264 +249,4 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
     return 0;
 }
 
-}
-
-static int test(int argc, char *argv[])
-{
-    if (argc < 6)
-    {
-        fprintf(stderr, "Usage:\n%s param_path model_path images_path neth netw\n", argv[0]);
-        return -1;
-    }
-    
-    struct stat statbuf;
-    if (0 != stat(argv[3], &statbuf))
-    {
-        fprintf(stderr, "stat error: %d\n", errno);
-        return -1;
-    }
-    
-    if (!S_ISDIR(statbuf.st_mode))
-    {
-        fprintf(stderr, "%s is not a directory!\n", argv[3]);
-        return -1;
-    }
-    
-    if (0 != access("./result", F_OK))
-    {
-        printf("create directory: result\n");
-        system("mkdir ./result");
-    }
-    
-    mot::JDETracker::instance()->init();
-    
-#if NCNN_VULKAN
-    ncnn::create_gpu_instance();
-#endif  // NCNN_VULKAN    
-    ncnn::Net *jde = new ncnn::Net;
-#if NCNN_VULKAN
-    jde->opt.use_vulkan_compute = true;
-#endif  // NCNN_VULKAN
-    jde->load_param(argv[1]);
-    jde->load_model(argv[2]);
-    
-    int netw = atoi(argv[5]);
-    int neth = atoi(argv[4]);
-
-    dirent **dir = NULL;
-    int num = scandir(argv[3], &dir, 0, alphasort);
-    for (int i = 0; i < num; ++i)
-    {
-        if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
-            continue;
-
-        char filein[128] = {0};
-        strcat(filein, argv[3]);
-        strcat(filein, dir[i]->d_name);
-        fprintf(stdout, "%s\n", filein);
-        
-        cv::Mat bgr = cv::imread(filein);
-        if (bgr.empty())
-        {
-            fprintf(stdout, "cv::imread(%s) fail!\n", filein);
-            continue;
-        }
-        
-        cv::Mat rgb;
-        cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
-        ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb.data, ncnn::Mat::PIXEL_RGB, rgb.cols, rgb.rows, netw, neth);
-        
-        const float means[] = {0.f, 0.f, 0.f};
-        const float norms[] = {0.0039215686f, 0.0039215686f, 0.0039215686f};
-        in.substract_mean_normalize(means, norms);
-        
-        ncnn::Extractor ext = jde->create_extractor();
-        ext.set_num_threads(6);        
-        ext.input("data", in);
-        
-        ncnn::Mat out;
-        ext.extract("detout", out);
-        
-        for (int i = 0; i < out.h; ++i)
-        {
-            float* val = out.row(i);
-            mot::correct_bbox(val + 2, bgr.cols, bgr.rows, netw, neth);
-            int l = static_cast<int>(val[2]);
-            int t = static_cast<int>(val[3]);
-            int r = static_cast<int>(val[4]);
-            int b = static_cast<int>(val[5]);
-            cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), cv::Scalar(0, 255, 255), 1);
-        }
-
-        std::vector<mot::Track> tracks;
-        cv::Mat dets(out.h, out.w, CV_32FC1, out.data);
-        mot::JDETracker::instance()->update(dets, tracks);
-        fprintf(stdout, "tracks %lu\n", tracks.size());
-        
-        int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
-        double fontscale = 1;
-        int thickness = 1;
-        for (size_t i = 0; i < tracks.size(); ++i)
-        {
-            int l = static_cast<int>(tracks[i].ltrb[0]);
-            int t = static_cast<int>(tracks[i].ltrb[1]);
-            int r = static_cast<int>(tracks[i].ltrb[2]);
-            int b = static_cast<int>(tracks[i].ltrb[3]);
-            
-            srand(tracks[i].id);
-            cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
-            cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), color, 2);
-            
-            std::ostringstream oss;
-            oss << tracks[i].id;
-            cv::String text = oss.str();
-            
-            int baseline;
-            cv::Size tsize = cv::getTextSize(text, fontface, fontscale, thickness, &baseline);
-            
-            int x = std::min(std::max(l, 0), bgr.cols - tsize.width - 1);
-            int y = std::min(std::max(b - baseline, tsize.height), bgr.rows - baseline - 1);
-            cv::putText(bgr, text, cv::Point(x, y), fontface, fontscale, cv::Scalar(0,255,255), thickness);
-        }
-        
-        char fileout[128] = {0};
-        strcat(fileout, "./result/");
-        strcat(fileout, dir[i]->d_name);
-        cv::imwrite(fileout, bgr);
-        free(dir[i]);
-    }
-    
-    free(dir);
-    delete jde;
-#if NCNN_VULKAN
-    ncnn::destroy_gpu_instance();
-#endif  // NCNN_VULKAN
-    
-    mot::JDETracker::instance()->free();    
-    system("./ffmpeg -i result/%06d.jpg result.mp4 -y");
-    
-    return 0;
-}
-
-int main(int argc, char *argv[])
-{
-#if 0
-    return test(argc, argv);
-#else
-    if (argc < 3)
-    {
-        fprintf(stderr, "Usage:\n%s cfg_path images_path\n", argv[0]);
-        return -1;
-    }
-    
-    struct stat statbuf;
-    if (0 != stat(argv[2], &statbuf))
-    {
-        fprintf(stderr, "stat error: %d\n", errno);
-        return -1;
-    }
-    
-    if (!S_ISDIR(statbuf.st_mode))
-    {
-        fprintf(stderr, "%s is not a directory!\n", argv[2]);
-        return -1;
-    }
-    
-    if (0 != access("./result", F_OK))
-    {
-        printf("create directory: result\n");
-        system("mkdir ./result");
-    }
-
-    int ret = mot::load_mot_model(argv[1]);
-    if (ret)
-        return -1;
-    
-    mot::MOT_Result result;
-    int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
-    double fontscale = 1;
-    int thickness = 1;
-        
-    dirent **dir = NULL;
-    int num = scandir(argv[2], &dir, 0, alphasort);
-    for (int i = 0; i < num; ++i)
-    {
-        if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
-            continue;
-
-        char filein[128] = {0};
-        strcat(filein, argv[2]);
-        strcat(filein, dir[i]->d_name);
-        fprintf(stdout, "%s\n", filein);
-        
-        cv::Mat bgr = cv::imread(filein);
-        if (bgr.empty())
-        {
-            fprintf(stdout, "cv::imread(%s) fail!\n", filein);
-            continue;
-        }
-        
-        cv::Mat rgb;
-        cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
-        ret = mot::forward_mot_model(rgb.data, rgb.cols, rgb.rows, rgb.cols * 3, result);
-        
-        std::vector<mot::MOT_Track>::iterator riter;
-        for (riter = result.begin(); riter != result.end();)
-        {
-            bool flag = false;
-            cv::Point pt1;
-            std::deque<mot::MOT_Rect>::iterator iter;
-            for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
-            {
-                int l = static_cast<int>(iter->left);
-                int t = static_cast<int>(iter->top);
-                int r = static_cast<int>(iter->right);
-                int b = static_cast<int>(iter->bottom);
-                
-                if (l == 0 && t == 0 && r == 0 && b == 0)
-                    continue;
-                
-                srand(riter->identifier);
-                cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
-                if (iter != riter->rects.begin())
-                {
-                    cv::Point pt2 = cv::Point((l + r) >> 1, (t + b) >> 1);
-                    cv::line(bgr, pt1, pt2, color);
-                    pt1 = pt2;
-                    continue;
-                }
-                                
-                cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), color, 2);
-                
-                std::ostringstream oss;
-                oss << riter->identifier;
-                cv::String text = oss.str();
-                
-                int baseline;
-                cv::Size tsize = cv::getTextSize(text, fontface, fontscale, thickness, &baseline);
-                
-                int x = std::min(std::max(l, 0), bgr.cols - tsize.width - 1);
-                int y = std::min(std::max(b - baseline, tsize.height), bgr.rows - baseline - 1);
-                cv::putText(bgr, text, cv::Point(x, y), fontface, fontscale, cv::Scalar(0,255,255), thickness);
-                
-                pt1 = cv::Point((l + r) >> 1, (t + b) >> 1);
-                flag = true;
-            }
-            
-            if (!flag)
-                riter = result.erase(riter);
-            else
-                riter++;
-        }
-        
-        char fileout[128] = {0};
-        strcat(fileout, "./result/");
-        strcat(fileout, dir[i]->d_name);
-        cv::imwrite(fileout, bgr);
-        free(dir[i]);
-    }
-    
-    free(dir);
-    mot::unload_mot_model();
-#endif
 }

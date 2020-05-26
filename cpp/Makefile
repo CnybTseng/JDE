@@ -5,13 +5,14 @@ GDB ?= 0
 
 ifeq ($(ARM), 1)
     CXX = aarch64-himix100-linux-g++
-    RELEASE = build-aarch64-himix100-linux-gnu/release
+    INSTALL = build-aarch64-himix100-linux-gnu/install
 else
     CXX = /opt/rh/devtoolset-6/root/usr/bin/g++
-    RELEASE = build/release
+    INSTALL = build/install
 endif
 
-THIRDPARTY_LIBS := thirdparty/ncnn/$(RELEASE)/lib/libncnn.a
+THIRDPARTY_LIBS := thirdparty/ncnn/$(INSTALL)/lib/libncnn.a
+THIRDPARTY_LIBS += thirdparty/yaml-cpp/$(INSTALL)/lib64/libyaml-cpp.a
 
 THIRDPARTY_LIBS += -L/usr/local/lib64
 
@@ -36,10 +37,10 @@ CXXFLAGS += -I$(MODEL_PATH)
 CXXFLAGS += -I/usr/local/include/opencv4
 CXXFLAGS += -I/usr/local/include/python3.6m
 CXXFLAGS += -I/home/image/tseng/venv/lib/python3.6/site-packages/numpy/core/include/numpy
-CXXFLAGS += -Ithirdparty/ncnn/$(RELEASE)/include/ncnn/
-CXXFLAGS += -Ithirdparty/libjpeg-turbo/$(RELEASE)/include
-CXXFLAGS += -Ithirdparty/pthreadpool/$(RELEASE)/include
-CXXFLAGS += -Ithirdparty/yaml-cpp/$(RELEASE)/include
+CXXFLAGS += -Ithirdparty/ncnn/$(INSTALL)/include/ncnn/
+CXXFLAGS += -Ithirdparty/libjpeg-turbo/$(INSTALL)/include
+CXXFLAGS += -Ithirdparty/pthreadpool/$(INSTALL)/include
+CXXFLAGS += -Ithirdparty/yaml-cpp/$(INSTALL)/include
 CXXFLAGS += -fopenmp
 CXXFLAGS += -fpermissive
 CXXFLAGS += -fPIC
@@ -68,7 +69,7 @@ SRCS += $(wildcard ./src/core/*.cpp)
 TARGET := mot
 
 OBJS := $(SRCS:%.cpp=%.o)
-EXE_OBJS := mot.o
+EXE_OBJS := mot-test.o
 LIB_OBJS := $(filter-out $(EXE_OBJS),$(OBJS))
 SLIB = libmot.so
 
@@ -82,7 +83,7 @@ RPATH += -Wl,-rpath=/usr/local/lib64
 
 all: $(SLIB) $(TARGET)
 
-mot:$(SLIB) mot.o
+mot:$(SLIB) mot-test.o
 	@$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -L. -lmot $(LIBS) $(RPATH)
 
 $(SLIB):$(LIB_OBJS)

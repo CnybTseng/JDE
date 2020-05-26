@@ -19,7 +19,7 @@ struct Track
     cv::Vec4f ltrb;
 };
 
-class MOT_API JDETracker
+class JDETracker
 {
 public:
     static JDETracker *instance(void);

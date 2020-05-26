@@ -77,26 +77,6 @@ void TKalmanFilter::project(cv::Mat &mean, cv::Mat &covariance) const
     gemm(temp, measurementMatrix, 1, measurementNoiseCov_, 1, covariance, cv::GEMM_2_T);
 }
 
-void TKalmanFilter::gating_distance(std::vector<cv::Mat> &measurements, std::vector<float> &dists)
-{
-    cv::Mat mean;
-    cv::Mat covariance;
-    project(mean, covariance);
-    
-    cv::Mat icovariance;
-    cv::invert(covariance, icovariance);
-    
-    dists.clear();
-    dists.resize(measurements.size());
-    
-    for (size_t i = 0; i < measurements.size(); ++i)
-    {
-        cv::Mat &x = measurements[i];
-        float dist = static_cast<float>(cv::Mahalanobis(x, mean, icovariance));
-        dists[i] = dist * dist;
-    }
-}
-
 int Trajectory::count = 0;
 
 const cv::Mat &Trajectory::predict(void)

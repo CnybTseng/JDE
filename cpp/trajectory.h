@@ -25,11 +25,10 @@ class TKalmanFilter : public cv::KalmanFilter
 public:
     TKalmanFilter(void);
     virtual ~TKalmanFilter(void) {}
-    void init(const cv::Mat &measurement);
-    const cv::Mat &predict();
-    const cv::Mat &correct(const cv::Mat &measurement);
-    void project(cv::Mat &mean, cv::Mat &covariance) const;
-    void gating_distance(std::vector<cv::Mat> &measurements, std::vector<float> &dists);
+    virtual void init(const cv::Mat &measurement);
+    virtual const cv::Mat &predict();
+    virtual const cv::Mat &correct(const cv::Mat &measurement);
+    virtual void project(cv::Mat &mean, cv::Mat &covariance) const;
 private:
     float std_weight_position;
     float std_weight_velocity;
@@ -54,12 +53,12 @@ public:
     Trajectory &operator=(const Trajectory &rhs);
     virtual ~Trajectory(void) {};
     static int next_id();
-    const cv::Mat & predict(void);
-    void update(Trajectory &traj, int timestamp, bool update_embedding=true);
-    void activate(int timestamp);
-    void reactivate(Trajectory &traj, int timestamp, bool newid=false);
-    void mark_lost(void);
-    void mark_removed(void);
+    virtual const cv::Mat &predict(void);
+    virtual void update(Trajectory &traj, int timestamp, bool update_embedding=true);
+    virtual void activate(int timestamp);
+    virtual void reactivate(Trajectory &traj, int timestamp, bool newid=false);
+    virtual void mark_lost(void);
+    virtual void mark_removed(void);
     friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b);

@@ -1,5 +1,0 @@
-export VULKAN_SDK=/home/image/tseng/project/cpudetector/thirdparty/1.1.114.0/x86_64
-cmake -DCMAKE_INSTALL_PREFIX=/home/image/tseng/project/oss/ncnn/build/release \
-    -DCMAKE_C_COMPILER=/opt/rh/devtoolset-6/root/usr/bin/gcc \
-    -DCMAKE_CXX_COMPILER=/opt/rh/devtoolset-6/root/usr/bin/g++ \
-    -DNCNN_VULKAN=ON ..

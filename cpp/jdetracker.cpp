@@ -67,7 +67,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     }
 
     TrajectoryPtrPool trajectory_pool = tracked_trajectories + this->lost_trajectories;
-    fprintf(stdout, "trajectory_pool %lu\n", trajectory_pool.size());
+
     for (size_t i = 0; i < trajectory_pool.size(); ++i)
         trajectory_pool[i]->predict();
    
@@ -88,13 +88,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         {
             pt->update(ct, timestamp);
             activated_trajectories.push_back(pt);
-            fprintf(stdout, "pool update %d\n", pt->id);
         }
         else
         {
             pt->reactivate(ct, timestamp);
             retrieved_trajectories.push_back(pt);
-            fprintf(stdout, "pool reactivate %d\n", pt->id);
         }
     }
     
@@ -121,13 +119,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         {
             pt->update(*ct, timestamp);
             activated_trajectories.push_back(pt);
-            fprintf(stdout, "next pool update %d\n", pt->id);
         }
         else
         {
             pt->reactivate(*ct, timestamp);
             retrieved_trajectories.push_back(pt);
-            fprintf(stdout, "next pool reactivate %d\n", pt->id);
         }
     }
     
@@ -149,18 +145,10 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     cost = iou_distance(unconfirmed_trajectories, nnext_candidates);
     linear_assignment(cost, 0.7f, matches, mismatch_row, mismatch_col);
     
-    for (int i = 0; i < cost.rows; ++i)
-    {
-        for (int j = 0; j < cost.cols; ++j)
-            fprintf(stdout, "%f ", cost.ptr<float>(i)[j]);
-        fprintf(stdout, "\n");
-    }
-    
     for (miter = matches.begin(); miter != matches.end(); miter++)
     {
         unconfirmed_trajectories[miter->first]->update(*nnext_candidates[miter->second], timestamp);
         activated_trajectories.push_back(unconfirmed_trajectories[miter->first]);
-        fprintf(stdout, "unconfirmed update %d\n", unconfirmed_trajectories[miter->first]->id);
     }
     
     TrajectoryPtrPool removed_trajectories;
@@ -174,7 +162,6 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     {
         nnext_candidates[mismatch_col[i]]->activate(timestamp);
         activated_trajectories.push_back(nnext_candidates[mismatch_col[i]]);
-        fprintf(stdout, "activate %d\n", nnext_candidates[mismatch_col[i]]->id);
     }
     
     for (size_t i = 0; i < this->lost_trajectories.size(); ++i)
@@ -198,15 +185,10 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     
     this->tracked_trajectories += activated_trajectories;
     this->tracked_trajectories += retrieved_trajectories;
-    fprintf(stdout, "activated_trajectories %lu\n", activated_trajectories.size());
-    fprintf(stdout, "retrieved_trajectories %lu\n", retrieved_trajectories.size());
-    fprintf(stdout, "tracked_trajectories %lu\n", this->tracked_trajectories.size());
     this->lost_trajectories -= this->tracked_trajectories;
     this->lost_trajectories += lost_trajectories;
     this->lost_trajectories -= this->removed_trajectories;
-    fprintf(stdout, "lost_trajectories %lu\n", this->lost_trajectories.size());
     this->removed_trajectories += removed_trajectories;
-    fprintf(stdout, "removed_trajectories %lu\n", this->removed_trajectories.size());
     remove_duplicate_trajectory(this->tracked_trajectories, this->lost_trajectories);
     
     tracks.clear();
@@ -216,8 +198,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         {
             Track track = {
                 .id = this->tracked_trajectories[i].id,
-                .ltrb = this->tracked_trajectories[i].ltrb
-            };
+                .ltrb = this->tracked_trajectories[i].ltrb};
             tracks.push_back(track);
         }
     }
@@ -330,7 +311,7 @@ void JDETracker::remove_duplicate_trajectory(TrajectoryPool &a, TrajectoryPool &
     id = 0;
     for (piter = b.begin(); piter != b.end(); )
     {
-        std::vector<int>::iterator iter = find(db.begin(), db.end(), id);
+        std::vector<int>::iterator iter = find(db.begin(), db.end(), id++);
         if (iter != db.end())
             piter = b.erase(piter);
         else

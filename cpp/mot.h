@@ -1,6 +1,10 @@
 #ifndef MOT_H
 #define MOT_H
 
+#include <deque>
+#include <vector>
+#include <string>
+
 #if defined _WIN32 || defined __CYGWIN__
   #define MOT_HELPER_DLL_IMPORT __declspec(dllimport)
   #define MOT_HELPER_DLL_EXPORT __declspec(dllexport)
@@ -29,9 +33,6 @@
   #define MOT_LOCAL
 #endif // MOT_DLL
 
-#include <deque>
-#include <vector>
-
 namespace mot {
 
 struct MOT_Rect
@@ -44,7 +45,7 @@ struct MOT_Rect
 
 enum MOT_Posture {
     STANDING,
-    LAY_DOWN,
+    LIE_DOWN,
     SQUAT
 };
 
@@ -58,11 +59,11 @@ struct MOT_Track
 
 typedef std::vector<MOT_Track> MOT_Result;
 
-MOT_API int load_mot_model(const char *cfg_path);
+extern "C" MOT_API int load_mot_model(const char *cfg_path);
 
-MOT_API int unload_mot_model();
+extern "C" MOT_API int unload_mot_model();
 
-MOT_API int forward_mot_model(const unsigned char *rgb, int width, int height, int stride, MOT_Result &result);
+extern "C" MOT_API int forward_mot_model(const unsigned char *rgb, int width, int height, int stride, MOT_Result &result);
 
 }   // namespace mot
 
