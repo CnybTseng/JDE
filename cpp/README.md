@@ -23,6 +23,16 @@ cmake -DCMAKE_INSTALL_PREFIX=$(pwd)/install \
     -DCMAKE_C_FLAGS="-fPIC" \
     -DCMAKE_CXX_FLAGS="-fPIC" ..
 
+交叉编译命令可参考如下(以华为海思Hi3559AV100为例)，根据实际情况修改
+cmake -G "Unix Makefiles" \
+    -DCMAKE_C_COMPILER=aarch64-himix100-linux-gcc \
+    -DCMAKE_CXX_COMPILER=aarch64-himix100-linux-g++ \
+    -DCMAKE_INSTALL_PREFIX=$(pwd)/install \
+    -DCMAKE_SYSTEM_NAME=Generic \
+    -DCMAKE_FIND_ROOT_PATH=/opt/hisi-linux \
+    -DCMAKE_C_FLAGS="-fPIC" \
+    -DCMAKE_CXX_FLAGS="-fPIC" ..
+
 # 2. 编译本模块
 根据实际情况修改Makefile，然后make即可
 
