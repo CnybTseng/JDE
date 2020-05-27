@@ -52,6 +52,7 @@ static struct
 {
     int netw = 576;
     int neth = 320;
+    int traj_cache_len = 30;
     std::string param_path;
     std::string bin_path;
     ncnn::Net *jde;
@@ -77,6 +78,9 @@ static int load_config(const char *cfg_path)
         
         yaml_node_is_defined_as_type(mot["neth"], Scalar);
         __model.neth = mot["neth"].as<int>();
+        
+        yaml_node_is_defined_as_type(mot["traj_cache_len"], Scalar);
+        __model.traj_cache_len = mot["traj_cache_len"].as<int>();
         
         yaml_node_is_defined_as_type(mot["param_path"], Scalar);
         __model.param_path = mot["param_path"].as<std::string>();
@@ -224,6 +228,7 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
                     .bottom = titer->ltrb[3],
                     .right = titer->ltrb[2]};
                 riter->rects.push_front(rect);
+                riter->rects.pop_back();
                 titer = tracks.erase(titer);
                 match = true;
             }
@@ -242,7 +247,7 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
             .identifier = tracks[i].id,
             .posture = STANDING,
             .category = std::string(__model.categories[0])};
-        track.rects.resize(30);
+        track.rects.resize(__model.traj_cache_len);
         result.push_back(track);
     }
     

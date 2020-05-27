@@ -1,6 +1,7 @@
 MOT:
     netw: 576
     neth: 320
+    traj_cache_len: 30
     param_path: /home/image/tseng/project/JDE/baseline.param
     bin_path: /home/image/tseng/project/JDE/baseline.bin
     categories:
