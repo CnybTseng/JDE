@@ -39,3 +39,6 @@ cmake -G "Unix Makefiles" \
 # 3. 测试本模块
 根据实际情况修改配置文件mot.yaml，注意测试图像必须为jpg格式(后缀名为.jpg)，如需测试其他格式图像，请修改mot-test.cpp文件第60行
 ./mot ./mot.yaml /path/to/the/test/images
+
+# 4. 使用本模块
+使用本模块只需要mot.h、SH_ImageAlgLogSystem.h和libmot.so，详细步骤参考mot-test.cpp
