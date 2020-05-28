@@ -7,6 +7,8 @@
 import torch
 import torch.nn.functional as F
 
+import yolov3
+
 class ConvBnReLU(torch.nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, padding, momentum, negative_slope):
         super(ConvBnReLU, self).__init__()
@@ -49,7 +51,7 @@ class Route(torch.nn.Module):
         return torch.cat(tensors=tensors, dim=1)
        
 class DarkNet(torch.nn.Module):
-    def __init__(self, num_classes=1, num_ids=0):
+    def __init__(self, anchors, num_classes=1, num_ids=0):
         super(DarkNet, self).__init__()
         self.num_classes = num_classes
         self.momentum = 0.1
@@ -154,7 +156,8 @@ class DarkNet(torch.nn.Module):
         '''Shared identifiers classifier'''
 
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
-
+        self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids)
+        
         self.__init_weights()
     
     def __init_weights(self):
@@ -175,7 +178,7 @@ class DarkNet(torch.nn.Module):
             elif isinstance(module, torch.nn.Linear):
                 pass
 
-    def forward(self, x):
+    def forward(self, x, targets=None, size=None):
         '''前向传播.
         
         参数
@@ -263,4 +266,7 @@ class DarkNet(torch.nn.Module):
         x = self.route10(tensors10)
         outputs.append(x)
 
+        if targets is not None:
+            return self.criterion(outputs, targets, size, self.classifier)
+        
         return outputs

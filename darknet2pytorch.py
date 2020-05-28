@@ -25,7 +25,7 @@ if __name__ == '__main__':
     dataset = dataset.CustomDataset(args.dataset, 'train')
     num_ids = dataset.max_id + 2
     print(num_ids)
-    model = darknet.DarkNet(num_classes=args.num_classes, num_ids=num_ids)
+    model = darknet.DarkNet(np.random.randint(0, 100, (12, 2)), num_classes=args.num_classes, num_ids=num_ids)
     
     with open(args.dm, 'rb') as file:
         major = np.fromfile(file, dtype=np.int32, count=1)

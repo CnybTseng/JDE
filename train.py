@@ -7,12 +7,14 @@
 import os
 import torch
 import random
+import logging
 import argparse
 import numpy as np
 import torch.utils.data
 from progressbar import *
 import multiprocessing as mp
 from functools import partial
+from collections import defaultdict
 
 import utils
 import yolov3
@@ -69,6 +71,8 @@ def parse_args():
         action='store_true')
     parser.add_argument('--workspace', type=str, default='workspace',
         help='workspace path')
+    parser.add_argument('--print-interval', type=int, default=40,
+        help='log printing interval [40]')
     args = parser.parse_args()
     return args
 
@@ -79,52 +83,17 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def train_one_epoch(model, criterion, classifier, optimizer, lr_scheduler,
-    data_loader, epoch, accumulated_batches, shared_size,
-    scale_sampler, device, sparsity=False, lamb=0.01):
+def get_logger(name='root'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(fmt='%(asctime)s [%(levelname)s]: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
 
-    model.train()
-    size = shared_size.numpy().tolist()
-    # widgets = ['Training epoch %d: ' % (epoch+1), Percentage(), ' ',
-    #     Bar('#'), ' ', Timer(), ' ', ETA()]
-    # pbar = ProgressBar(widgets=widgets, maxval=len(data_loader)).start()  
-    print(f'//////////////////////////////////epoch:{epoch}')
-
-    optimizer.zero_grad()
-    for batch_id, (images, targets) in enumerate(data_loader):
-        ys = model(images.to(device))
-        loss, metrics = criterion(ys, targets.to(device), size, classifier)
-        loss.backward()
-        
-        if sparsity:
-            model.correct_bn_grad(lamb)
-        
-        total_batches = epoch * len(data_loader) + batch_id + 1
-        if total_batches % accumulated_batches == 0:
-            optimizer.step()
-            optimizer.zero_grad()
-            lr_scheduler.step()
-
-        if total_batches % 40 == 0:
-            for k, v in metrics.items():
-                if isinstance(v, int):
-                    print(f'{k}:{v} ', end='')
-                else:
-                    print(f'{k}:%.5f ' % v, end='')
-            print(f'LR:%e size:{size}' % lr_scheduler.get_lr()[0])       
-        
-        # pbar.update(batch_id + 1)
-        size = scale_sampler(total_batches)
-        shared_size = torch.from_numpy(np.ndarray(size))
-    
-    # pbar.finish()
-
-def train(args):
-    try:
-        mp.set_start_method('spawn')
-    except RuntimeError:
-        pass
-    
+def train(args):    
     utils.make_workspace_dirs(args.workspace)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     anchors = np.loadtxt(os.path.join(args.dataset, 'anchors.txt'))
@@ -140,13 +109,10 @@ def train(args):
         True, num_workers=args.workers, collate_fn=collate_fn, pin_memory=args.pin)
 
     num_ids = dataset.max_id + 2
-    model = darknet.DarkNet(num_classes=args.num_classes, num_ids=num_ids).to(device)
+    model = darknet.DarkNet(anchors, num_classes=args.num_classes, num_ids=num_ids).to(device)
     if args.checkpoint:
         print(f'load {args.checkpoint}')
         model.load_state_dict(torch.load(args.checkpoint))    
-        
-    criterion = yolov3.YOLOv3Loss(args.num_classes, anchors, num_ids).to(device)
-    classifier = torch.nn.Linear(512, num_ids).cuda() if num_ids > 0 else torch.nn.Sequential().cuda()
     
     params = [p for p in model.parameters() if p.requires_grad]
     if args.optim == 'sgd':
@@ -157,8 +123,7 @@ def train(args):
     # freezon batch normalization layers
     for name, param in model.named_parameters():
         param.requires_grad = False if 'norm' in name else True
-        if 'norm' in name:
-            print(f'freeze {name}')
+        if 'norm' in name: print(f'freeze {name}')
 
     trainer = f'{args.workspace}/checkpoint/trainer-ckpt.pth'
     if args.resume:
@@ -187,10 +152,39 @@ def train(args):
 
     print(f'{args}\nStart training from epoch {start_epoch}')
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
+    logger = get_logger()
+    size = shared_size.numpy().tolist()
     for epoch in range(start_epoch, args.epochs):
-        train_one_epoch(model, criterion, classifier, optimizer, lr_scheduler,
-            data_loader, epoch, args.accumulated_batches, shared_size,
-            scale_sampler, device, args.sparsity, args.lamb)
+        model.train()
+        logger.info(('%8s%10s' + '%10s' * 8) % (
+            'Epoch', 'Batch', 'LBOX', 'LCLS', 'LIDE', 'LOSS', 'SB', 'SC', 'SI', 'LR'))
+
+        rmetrics = defaultdict(float)
+        optimizer.zero_grad()
+        for batch_id, (images, targets) in enumerate(data_loader):
+            loss, metrics = model(images.to(device), targets.to(device), size)
+            loss.backward()
+            
+            if args.sparsity:
+                model.correct_bn_grad(args.lamb)
+            
+            total_batches = epoch * len(data_loader) + batch_id + 1
+            if total_batches % args.accumulated_batches == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+                lr_scheduler.step()
+
+            for k, v in metrics.items():
+                rmetrics[k] = (rmetrics[k] * (total_batches - 1) + metrics[k]) / total_batches
+            
+            fmt = tuple([('%g/%g') % (epoch, args.epochs), ('%g/%g') % (batch_id,
+                len(data_loader))] + list(rmetrics.values()) + [lr_scheduler.get_lr()[0]])
+            if total_batches % args.print_interval == 0:
+                logger.info(('%8s%10s' + '%10.3g' * (len(rmetrics.values()) + 1)) % fmt)
+
+            size = scale_sampler(total_batches)
+            shared_size[0], shared_size[1] = size[0], size[1]
+      
         torch.save(model.state_dict(), f"{model_path}" % epoch)
         torch.save({'epoch' : epoch,
             'optimizer' : optimizer.state_dict(),
