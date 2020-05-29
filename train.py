@@ -109,7 +109,7 @@ def train(args):
     dataset = ds.CustomDataset(args.dataset, 'train')
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
-        True, num_workers=args.workers, collate_fn=collate_fn, pin_memory=args.pin)
+        True, num_workers=args.workers, collate_fn=collate_fn, pin_memory=args.pin, drop_last=True)
 
     num_ids = dataset.max_id + 2
     model = darknet.DarkNet(anchors, num_classes=args.num_classes, num_ids=num_ids).to(device)
@@ -145,13 +145,15 @@ def train(args):
             factor *= pow(args.lr_gamma, int(iter > i))
         return factor
 
-    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+        milestones=[int(args.epochs * 0.5), int(args.epochs * 0.75)], gamma=args.lr_gamma)
     if args.resume:
         start_epoch = trainer_state['epoch'] + 1
         lr_scheduler.load_state_dict(trainer_state['lr_scheduler'])
     else:
         start_epoch = 0
-        lr_scheduler.step()     # set the lr for the first accumulated batches
+        # lr_scheduler.step()     # set the lr for the first accumulated batches
 
     print(f'{args}\nStart training from epoch {start_epoch}')
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
@@ -164,26 +166,32 @@ def train(args):
 
         rmetrics = defaultdict(float)
         optimizer.zero_grad()
-        for batch_id, (images, targets) in enumerate(data_loader):
+        for batch, (images, targets) in enumerate(data_loader):
+            warmup = min(args.warmup, len(data_loader))
+            if epoch == 0 and batch <= warmup:
+                lr = args.lr * (batch / warmup) ** 4
+                for g in optimizer.param_groups:
+                    g['lr'] = lr
+        
             loss, metrics = model(images.to(device), targets.to(device), size)
             loss.backward()
             
             if args.sparsity:
                 model.correct_bn_grad(args.lamb)
             
-            num_batches = epoch * len(data_loader) + batch_id + 1
-            if num_batches % args.accumulated_batches == 0:
+            num_batches = epoch * len(data_loader) + batch + 1
+            if ((batch + 1) % args.accumulated_batches == 0) or (batch == len(data_loader) - 1):
                 optimizer.step()
                 optimizer.zero_grad()
-                lr_scheduler.step()
+                # lr_scheduler.step()
 
             for k, v in metrics.items():
-                rmetrics[k] = (rmetrics[k] * batch_id + metrics[k]) / (batch_id + 1)
+                rmetrics[k] = (rmetrics[k] * batch + metrics[k]) / (batch + 1)
             
-            fmt = tuple([('%g/%g') % (epoch, args.epochs), ('%g/%g') % (batch_id,
+            fmt = tuple([('%g/%g') % (epoch, args.epochs), ('%g/%g') % (batch,
                 len(data_loader)), ('%gx%g') % (size[0], size[1])] + \
-                list(rmetrics.values()) + [lr_scheduler.get_lr()[0]])
-            if num_batches % args.print_interval == 0:
+                list(rmetrics.values()) + [optimizer.param_groups[0]['lr']])
+            if batch % args.print_interval == 0:
                 logger.info(('%8s%10s%10s' + '%10.3g' * (len(rmetrics.values()) + 1)) % fmt)
 
             size = scale_sampler(num_batches)
@@ -196,6 +204,7 @@ def train(args):
         
         if epoch >= args.eval_epoch:
             pass
+        lr_scheduler.step()
 
 if __name__ == '__main__':
     args = parse_args()
