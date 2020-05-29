@@ -4,6 +4,10 @@
 ## 1.1 编译opencv
 编译opencv参考官网https://opencv.org/
 
+交叉编译命令可参考如下，根据实际情况修改
+cmake -DCMAKE_TOOLCHAIN_FILE=../himix100.toolchain.cmake \
+    -DCMAKE_INSTALL_PREFIX=$(pwd)/install ..
+
 ## 1.2 编译ncnn
 
 从github克隆ncnn到本地

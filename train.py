@@ -83,10 +83,13 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def get_logger(name='root'):
+def get_logger(name='root', path=None):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler()
+    if path is None:
+        handler = logging.StreamHandler()
+    else:
+        handler = logging.FileHandler(path, encoding='utf-8')
     formatter = logging.Formatter(fmt='%(asctime)s [%(levelname)s]: %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(formatter)
@@ -152,12 +155,12 @@ def train(args):
 
     print(f'{args}\nStart training from epoch {start_epoch}')
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
-    logger = get_logger()
+    logger = get_logger(path=os.path.join(args.workspace, 'log.txt'))
     size = shared_size.numpy().tolist()
     for epoch in range(start_epoch, args.epochs):
         model.train()
-        logger.info(('%8s%10s' + '%10s' * 8) % (
-            'Epoch', 'Batch', 'LBOX', 'LCLS', 'LIDE', 'LOSS', 'SB', 'SC', 'SI', 'LR'))
+        logger.info(('%8s%10s%10s' + '%10s' * 8) % (
+            'Epoch', 'Batch', 'SIZE', 'LBOX', 'LCLS', 'LIDE', 'LOSS', 'SB', 'SC', 'SI', 'LR'))
 
         rmetrics = defaultdict(float)
         optimizer.zero_grad()
@@ -168,21 +171,22 @@ def train(args):
             if args.sparsity:
                 model.correct_bn_grad(args.lamb)
             
-            total_batches = epoch * len(data_loader) + batch_id + 1
-            if total_batches % args.accumulated_batches == 0:
+            num_batches = epoch * len(data_loader) + batch_id + 1
+            if num_batches % args.accumulated_batches == 0:
                 optimizer.step()
                 optimizer.zero_grad()
                 lr_scheduler.step()
 
             for k, v in metrics.items():
-                rmetrics[k] = (rmetrics[k] * (total_batches - 1) + metrics[k]) / total_batches
+                rmetrics[k] = (rmetrics[k] * batch_id + metrics[k]) / (batch_id + 1)
             
             fmt = tuple([('%g/%g') % (epoch, args.epochs), ('%g/%g') % (batch_id,
-                len(data_loader))] + list(rmetrics.values()) + [lr_scheduler.get_lr()[0]])
-            if total_batches % args.print_interval == 0:
-                logger.info(('%8s%10s' + '%10.3g' * (len(rmetrics.values()) + 1)) % fmt)
+                len(data_loader)), ('%gx%g') % (size[0], size[1])] + \
+                list(rmetrics.values()) + [lr_scheduler.get_lr()[0]])
+            if num_batches % args.print_interval == 0:
+                logger.info(('%8s%10s%10s' + '%10.3g' * (len(rmetrics.values()) + 1)) % fmt)
 
-            size = scale_sampler(total_batches)
+            size = scale_sampler(num_batches)
             shared_size[0], shared_size[1] = size[0], size[1]
       
         torch.save(model.state_dict(), f"{model_path}" % epoch)

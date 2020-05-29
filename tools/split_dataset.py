@@ -5,8 +5,12 @@ import argparse
 import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', type=str, help='path to training samples')
-parser.add_argument('--train-ratio', '-tr', dest='tr', default=1, type=float, help='the ratio of training samples')
+parser.add_argument('--path', type=str,
+    help='path to training samples')
+parser.add_argument('--train-ratio', '-tr', dest='tr', default=1, type=float,
+    help='the ratio of training samples')
+parser.add_argument('--save-path', type=str,
+    help='path to the generated dataset')
 args = parser.parse_args()
 
 image_filenames = []
@@ -21,7 +25,7 @@ rand_index = np.random.permutation(num_samples)
 num_train = int(args.tr * num_samples)
 num_test = num_samples - num_train
 
-with open('train.txt', 'w') as file:
+with open(os.path.join(args.save_path, 'train.txt'), 'w') as file:
     for i in range(num_train):
         root, ext = os.path.splitext(image_filenames[rand_index[i]])
         root = root.replace('img1', 'labels_with_ids')
@@ -31,7 +35,7 @@ with open('train.txt', 'w') as file:
 if num_test < 1:
     sys.exit()
 
-with open('test.txt', 'w') as file:
+with open(os.path.join(args.save_path, 'test.txt'), 'w') as file:
     for i in range(num_train, num_samples):
         root, ext = os.path.splitext(image_filenames[rand_index[i]])
         root = root.replace('img1', 'labels_with_ids')

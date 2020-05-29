@@ -7,7 +7,6 @@ import sys
 import torch
 import utils
 import transforms as T
-from pascalvoc import PascalVocReader as pvr
 
 def letterbox_image(im, insize=(320,576,3), border=128):
     '''生成letterbox图像
