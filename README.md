@@ -7,16 +7,15 @@ Towards Real-Time Multi-Object Tracking
 
 ## 1.1 准备数据集
 
-从MOT挑战赛官网下载数据集并解压
-wget https://motchallenge.net/data/MOT16.zip -P /data/tseng/dataset/jde
-cd /data/tseng/dataset/jde
-unzip MOT16.zip -d MOT16
+* 从MOT挑战赛官网下载数据集并解压<br>
+wget https://motchallenge.net/data/MOT16.zip -P /data/tseng/dataset/jde<br>
+cd /data/tseng/dataset/jde<br>
+unzip MOT16.zip -d MOT16<br>
 
-创建MOT16任务的工作区, 并将MOT格式标注文件转换为需要格式的标注文件
-cd $(JDE)
-mkdir -p workspace/mot16-2020-5-29
-./tools/split_dataset.sh ./workspace/mot16-2020-5-29
-
+* 创建MOT16任务的工作区, 并将MOT格式标注文件转换为需要格式的标注文件<br>
+cd $(JDE)<br>
+mkdir -p workspace/mot16-2020-5-29<br>
+./tools/split_dataset.sh ./workspace/mot16-2020-5-29<br>
 此时workspace/mot16-2020-5-29目录下会生成train.txt
 
 ## 1.2 从预训练模型导出参数生成JDE初始模型
