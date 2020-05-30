@@ -23,7 +23,7 @@ mkdir -p workspace/mot16-2020-5-29<br>
 
 * 从darknet官网下载darknet53预训练模型<br>
 wget https://pjreddie.com/media/files/darknet53.conv.74 -P ./workspace<br>
-python darknet2pytorch.py -pm ./workspace/mot16-2020-5-29/jde.pth \<br>
+python darknet2pytorch.py -pm ./workspace/mot16-2020-5-29/jde.pth \ <br>
     --dataset ./workspace/mot16-2020-5-29 -dm ./workspace/darknet53.conv.74 -lbo<br>
 此时workspace/mot16-2020-5-29目录下会生成初始模型jde.pth, 其骨干网已初始化为darnet53的参数<br>
 
