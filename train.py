@@ -7,7 +7,6 @@
 import os
 import torch
 import random
-import logging
 import argparse
 import numpy as np
 import torch.utils.data
@@ -73,6 +72,8 @@ def parse_args():
         help='workspace path')
     parser.add_argument('--print-interval', type=int, default=40,
         help='log printing interval [40]')
+    parser.add_argument('--seed', type=int, default=0,
+        help='seed number')
     args = parser.parse_args()
     return args
 
@@ -83,19 +84,6 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
-def get_logger(name='root', path=None):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    if path is None:
-        handler = logging.StreamHandler()
-    else:
-        handler = logging.FileHandler(path, encoding='utf-8')
-    formatter = logging.Formatter(fmt='%(asctime)s [%(levelname)s]: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    return logger
-
 def train(args):    
     utils.make_workspace_dirs(args.workspace)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -103,30 +91,36 @@ def train(args):
     scale_sampler = utils.TrainScaleSampler(args.in_size, args.scale_step,
         args.rescale_freq)
     shared_size = torch.IntTensor(args.in_size).share_memory_()
+    logger = utils.get_logger(path=os.path.join(args.workspace, 'log.txt'))
     
     torch.backends.cudnn.benchmark = True
     
     dataset = ds.CustomDataset(args.dataset, 'train')
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
-        True, num_workers=args.workers, collate_fn=collate_fn, pin_memory=args.pin, drop_last=True)
+        True, num_workers=args.workers, collate_fn=collate_fn,
+        pin_memory=args.pin, drop_last=True)
 
     num_ids = dataset.max_id + 2
-    model = darknet.DarkNet(anchors, num_classes=args.num_classes, num_ids=num_ids).to(device)
+    model = darknet.DarkNet(anchors, num_classes=args.num_classes,
+        num_ids=num_ids).to(device)
     if args.checkpoint:
-        print(f'load {args.checkpoint}')
         model.load_state_dict(torch.load(args.checkpoint))    
     
     params = [p for p in model.parameters() if p.requires_grad]
     if args.optim == 'sgd':
-        optimizer = torch.optim.SGD(params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        optimizer = torch.optim.SGD(params, lr=args.lr,
+            momentum=args.momentum, weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.weight_decay)
 
     # freezon batch normalization layers
     for name, param in model.named_parameters():
-        param.requires_grad = False if 'norm' in name else True
-        if 'norm' in name: print(f'freeze {name}')
+        if 'norm' in name:
+            param.requires_grad = False
+            logger.info('freeze {}'.format(name))
+        else:
+            param.requires_grad = True
 
     trainer = f'{args.workspace}/checkpoint/trainer-ckpt.pth'
     if args.resume:
@@ -134,31 +128,20 @@ def train(args):
         optimizer.load_state_dict(trainer_state['optimizer'])
 
     if -1 in args.milestones:
-        num_batches = len(data_loader) * args.epochs
-        args.milestones = [int(0.5 * num_batches), int(0.75 * num_batches)]
-    
-    def lr_lambda(iter):
-        if iter < args.warmup:
-            return pow(iter / args.warmup, 4)
-        factor = 1
-        for i in args.milestones:
-            factor *= pow(args.lr_gamma, int(iter > i))
-        return factor
-
-    # lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        args.milestones = [int(args.epochs * 0.5), int(args.epochs * 0.75)]
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-        milestones=[int(args.epochs * 0.5), int(args.epochs * 0.75)], gamma=args.lr_gamma)
+        milestones=args.milestones, gamma=args.lr_gamma)
+    
+    start_epoch = 0
     if args.resume:
         start_epoch = trainer_state['epoch'] + 1
         lr_scheduler.load_state_dict(trainer_state['lr_scheduler'])
-    else:
-        start_epoch = 0
-        # lr_scheduler.step()     # set the lr for the first accumulated batches
 
-    print(f'{args}\nStart training from epoch {start_epoch}')
+    logger.info(args)
+    logger.info('Start training from epoch {}'.format(start_epoch))
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
-    logger = get_logger(path=os.path.join(args.workspace, 'log.txt'))
     size = shared_size.numpy().tolist()
+    
     for epoch in range(start_epoch, args.epochs):
         model.train()
         logger.info(('%8s%10s%10s' + '%10s' * 8) % (
@@ -183,7 +166,6 @@ def train(args):
             if ((batch + 1) % args.accumulated_batches == 0) or (batch == len(data_loader) - 1):
                 optimizer.step()
                 optimizer.zero_grad()
-                # lr_scheduler.step()
 
             for k, v in metrics.items():
                 rmetrics[k] = (rmetrics[k] * batch + metrics[k]) / (batch + 1)
@@ -208,5 +190,5 @@ def train(args):
 
 if __name__ == '__main__':
     args = parse_args()
-    init_seeds()
+    # init_seeds(args.seed)
     train(args)

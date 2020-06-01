@@ -9,7 +9,21 @@ import re
 import cv2
 import copy
 import torch
+import logging
 import numpy as np
+
+def get_logger(name='root', path=None):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    if path is None:
+        handler = logging.StreamHandler()
+    else:
+        handler = logging.FileHandler(path, encoding='utf-8')
+    formatter = logging.Formatter(fmt='%(asctime)s [%(levelname)s]: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
 
 class TrainScaleSampler(object):
     '''Multiple scales training scale sampler.
@@ -17,7 +31,7 @@ class TrainScaleSampler(object):
     Args:
         size: Default sampling size. The size is [height, width].
         scale_step: Image scale step. The scale_step is [ystart, ystop,
-            num, xstart, xstop]. The ystart is the starting value of the
+            num[, xstart, xstop]]. The ystart is the starting value of the
             image height sequence, and the ystop is the end value of the
             image height sequence. The num is the number of samples to
             generate. The xstart and xstop are optional, if neither of
@@ -49,47 +63,15 @@ def make_workspace_dirs(workspace='./workspace'):
     if not os.path.exists(workspace):
         os.makedirs(workspace)
     if not os.path.exists(os.path.join(workspace, 'checkpoint')):
-        os.makedirs(os.path.join(workspace, 'checkpoint'))
-    if not os.path.exists(os.path.join(workspace, 'log')):
-        os.makedirs(os.path.join(workspace, 'log'))
+        os.makedirs(os.path.join(workspace, 'checkpoint'))     
 
-def print_training_message(workspace, epoch, msgs, batch_size):
-    lrs = []
-    with open(f'{workspace}/log/verbose.txt', 'a') as file:
-        losses = 0
-        num_batches = len(msgs)
-        num_yolo = len(msgs[0][1])
-        for loss, metrics, lr in msgs:
-            for metric in metrics:
-                for k, v in metric.items():
-                    if isinstance(v, int): file.write(f'{k}:{v} ')
-                    else : file.write(f'{k}:%.5f ' % v)
-                file.write('\n')
-            losses += loss
-            file.write(f'LOSS:%.5f\n' % loss)
-            lrs.append(lr)
-        losses /= (num_batches * num_yolo * batch_size)
-        file.write(f'Epoch {epoch} done, average loss:%.5f\n' % losses)
-        print(f'Epoch {epoch} done, average loss:%.5f' % losses)
-        file.close()
-    
-    with open(f'{workspace}/log/loss.txt', 'a') as file:
-        file.write(f'{losses}\n')
-        file.close()
-    
-    with open(f"{workspace}/log/lr.txt", 'a') as file:
-        for lr in lrs:
-            file.write(f"{lr}\n")
-        file.close()
-
-def cal_av_loss(msgs, batch_size):
-    losses = 0
-    num_batches = len(msgs)
-    num_yolo = len(msgs[0][1])
-    for loss, metrics in msgs:
-        losses += loss
-    losses /= (num_batches * num_yolo * batch_size)
-    return losses      
+def lr_lambda(iter, warmup, milestones, lr_gamma):
+    if iter < warmup:
+        return pow(iter / warmup, 4)
+    factor = 1
+    for i in milestones:
+        factor *= pow(lr_gamma, int(iter > i))
+    return factor
 
 def load_class_names(path):
     class_names = []
