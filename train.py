@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # file: train.py
-# brief: YOLOv3 implementation based on PyTorch
+# brief: JDE implementation based on PyTorch
 # author: Zeng Zhiwei
-# date: 2019/7/18
+# date: 2020/4/20
 
 import os
 import torch
@@ -74,6 +74,8 @@ def parse_args():
         help='log printing interval [40]')
     parser.add_argument('--seed', type=int, default=0,
         help='seed number')
+    parser.add_argument('--freeze-bn', help='freeze batch norm',
+        action='store_true')
     args = parser.parse_args()
     return args
 
@@ -114,13 +116,13 @@ def train(args):
     else:
         optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.weight_decay)
 
-    # freezon batch normalization layers
-    for name, param in model.named_parameters():
-        if 'norm' in name:
-            param.requires_grad = False
-            logger.info('freeze {}'.format(name))
-        else:
-            param.requires_grad = True
+    if args.freeze_bn:
+        for name, param in model.named_parameters():
+            if 'norm' in name:
+                param.requires_grad = False
+                logger.info('freeze {}'.format(name))
+            else:
+                param.requires_grad = True
 
     trainer = f'{args.workspace}/checkpoint/trainer-ckpt.pth'
     if args.resume:
@@ -190,5 +192,5 @@ def train(args):
 
 if __name__ == '__main__':
     args = parse_args()
-    # init_seeds(args.seed)
+    init_seeds(args.seed)
     train(args)

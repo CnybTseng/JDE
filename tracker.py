@@ -517,6 +517,19 @@ class JDETracker(object):
         
         return [trajectory for trajectory in self.tracked_trajectories if trajectory.is_activated]
 
+def save_trajectories(path, trajectories, frame_id):
+    line = '{},{},{},{},{},{},1,-1,-1,-1\n'
+    with open(path, 'a') as file:
+        for trajectory in trajectories:
+            if trajectory.id < 0:
+                continue
+            l = trajectory.ltrb[0]
+            t = trajectory.ltrb[1]
+            w = trajectory.ltrb[2] - trajectory.ltrb[0]
+            h = trajectory.ltrb[3] - trajectory.ltrb[1]
+            file.write(line.format(frame_id, trajectory.id, l, t, w, h))
+        file.close()
+
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
@@ -531,7 +544,6 @@ def main(args):
 
     model.eval()
 
-    mkdir('./result')
     if '320x576' in args.insize:
         anchors = ((6,16),   (8,23),    (11,32),   (16,45),
                    (21,64),  (30,90),   (43,128),  (60,180),
@@ -550,8 +562,13 @@ def main(args):
     tracker = JDETracker()
     dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
     
-    os.system('rm -f result/*')
-    for path, im, lb_im in dataloader:
+    strs = re.split(r'[\\, /]', args.img_path)
+    imgpath = os.path.join('result', strs[-3], 'img')
+    mkdir(imgpath)
+    traj_path = os.path.join('result', strs[-3], '{}.txt'.format(strs[-3]))
+    
+    os.system('rm -f {}'.format(os.path.join(imgpath, '*')))
+    for i, (path, im, lb_im) in enumerate(dataloader):
         input = torch.from_numpy(lb_im).unsqueeze(0).to(device)
         with torch.no_grad():
             outputs = model(input)
@@ -567,13 +584,15 @@ def main(args):
             trajectories = tracker.update(outputs.numpy())
             print('{}'.format(len(trajectories)))        
             result = overlap_trajectory(trajectories, im)
+            save_trajectories(traj_path, trajectories, i + 1)
         else:
             print('')
             result = overlap(outputs, im)
         segments = re.split(r'[\\, /]', path)
-        cv2.imwrite('result/{}'.format(segments[-1]), result)
+        cv2.imwrite(os.path.join(imgpath, segments[-1]), result)
     
-    os.system('./bin/ffmpeg-4.2.2-amd64-static/ffmpeg -i result/%06d.jpg result.mp4 -y')
+    if os.path.isfile('./bin/ffmpeg'):
+        os.system('./bin/ffmpeg -i {} result.mp4 -y'.format(os.path.join(imgpath, '%06d.jpg')))
 
 if __name__ == '__main__':
     args = parse_args()
