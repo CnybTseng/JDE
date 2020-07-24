@@ -1,0 +1,8 @@
+{
+  "type": "Ascend Operator",
+  "project_type": "TBE Operator",
+  "project_desc": "Describe your operator here.",
+  "target": "RC",
+  "target_id": "RC",
+  "ddk_version": "1.32.0.B080"
+}

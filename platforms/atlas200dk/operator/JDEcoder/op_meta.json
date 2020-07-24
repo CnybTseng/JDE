@@ -1,0 +1,30 @@
+{
+  "id": 0,
+  "project_type": "TBE",
+  "ddk_home": "/home/tseng/.mindstudio/huawei/ddk/1.32.0.B080/ddk",
+  "om_op_name": "JDEcoder",
+  "om_op_parser_code": "",
+  "om_op_weight_code": "",
+  "om_op_output_code": "",
+  "om_op_operator_code": "",
+  "input_num": 0,
+  "output_num": 0,
+  "from_model": 0,
+  "param_message_name": "",
+  "op_param_field_name": "",
+  "item_mask": [
+    "workspace",
+    "outputshape"
+  ],
+  "params": [],
+  "output_shape": [],
+  "plugin_cfgs": [
+    {
+      "framework": "CAFFE"
+    }
+  ],
+  "workspace": {
+    "num": 0,
+    "size": []
+  }
+}

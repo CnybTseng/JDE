@@ -1,0 +1,42 @@
+graphs {
+  graph_id: 100
+  priority: 1
+  engines {
+    id: 1000
+    engine_name: "InputEngine"
+    side: HOST
+    thread_num: 1
+  }
+  engines {
+    id: 1002
+    engine_name: "OutputEngine"
+    side: HOST
+    thread_num: 1
+  }
+  engines {
+    id: 1003
+    engine_name: "JDEngine"
+    so_name: "./libJDEngine.so"
+    side: DEVICE
+    thread_num: 1
+    ai_config{
+      items{
+          name: "model_path"
+          value: "./test/model/jde.om"
+      }
+    }
+  }
+
+  connects {
+    src_engine_id: 1000
+    src_port_id: 0
+    target_engine_id: 1003
+    target_port_id: 0
+  }
+  connects {
+    src_engine_id: 1003
+    src_port_id: 0
+    target_engine_id: 1002
+    target_port_id: 0
+  }
+}
