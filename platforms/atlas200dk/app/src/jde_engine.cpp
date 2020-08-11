@@ -41,7 +41,6 @@ HIAI_StatusT JDEngine::Init(const hiai::AIConfig &config_,
 
 HIAI_IMPL_ENGINE_PROCESS("JDEngine", JDEngine, JDE_ENGINE_INPUT_SIZE)
 {
-    fprintf(stderr, "JDEngine process start\n");
     HIAI_StatusT ret = HIAI_OK;
     
     std::shared_ptr<hiai::RawDataBuffer> rdbuf = \
@@ -76,7 +75,6 @@ HIAI_IMPL_ENGINE_PROCESS("JDEngine", JDEngine, JDE_ENGINE_INPUT_SIZE)
     }
     
     hiai::Engine::SendData(0, "IAITensorVector", static_pointer_cast<void>(outputs));
-    
-    fprintf(stderr, "JDEngine process success\n");
+
     return HIAI_OK;
 }

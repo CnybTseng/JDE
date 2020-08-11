@@ -1,126 +1,92 @@
 #include <cstdio>
+#include <dirent.h>
 #include <unistd.h>
 #include <fstream>
-#include <hiaiengine/api.h>
+
 #include <opencv2/opencv.hpp>
 
-#include "dtype.h"
-#include "errcode.h"
-
-#define GRAPH_CONFIG_PATH "./test/config/graph.prototxt"
-#define TEST_IMG_PATH "./test/data/000002.bin"
-
-#define DEVICE_ID 0
-#define GRAPH_ID 100
-#define INPUT_ENGINE_ID 1000
-#define INPUT_PORT_ID 0
-#define OUTPUT_ENGINE_ID 1002
-#define OUTPUT_PORT_ID 0
-
-class JDEDataRecvInterface : public hiai::DataRecvInterface
-{
-public:
-    JDEDataRecvInterface() = default;
-    ~JDEDataRecvInterface() = default;
-    HIAI_StatusT RecvData(const std::shared_ptr<void> &message)
-    {
-        std::shared_ptr<DetectionVector> dets = \
-            std::static_pointer_cast<DetectionVector>(message);
-        if (nullptr == dets) {
-            HIAI_ENGINE_LOG("fail to receive messages");
-            return HIAI_INVALID_INPUT_MSG;
-        }
-        
-        std::vector<cv::Mat> mats = {
-            cv::Mat(320, 576, CV_32FC1),
-            cv::Mat(320, 576, CV_32FC1),
-            cv::Mat(320, 576, CV_32FC1)
-        };
-        
-        std::ifstream istrm(TEST_IMG_PATH, std::ios::binary);
-        if (!istrm.is_open()) {
-            fprintf(stderr, "fail to open %s\n", TEST_IMG_PATH);
-        } else {
-            for (int32_t i = 0; i < mats.size(); ++i)
-                istrm.read(reinterpret_cast<char *>(mats[i].data), mats[i].total() * sizeof(float));
-            istrm.close();
-        }
-        
-        cv::Mat rgb_norm;
-        cv::merge(mats, rgb_norm);
-        
-        cv::Mat rgb;
-        rgb_norm.convertTo(rgb, CV_8UC3, 255);
-        
-        cv::Mat bgr;
-        cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
-        
-        std::vector<Detection>::iterator iter;
-        for (iter = dets.get()->data.begin(); iter != dets.get()->data.end(); ++iter) {            
-            int32_t l = static_cast<int>(iter->bbox.left + 0.5f);
-            int32_t t = static_cast<int>(iter->bbox.top + 0.5f);
-            int32_t r = static_cast<int>(iter->bbox.right + 0.5f);
-            int32_t b = static_cast<int>(iter->bbox.bottom + 0.5f);
-            cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), cv::Scalar(0, 255, 255), 1);
-        }
-        
-        cv::imwrite("result.png", bgr);
-        
-        return HIAI_OK;
-    }    
-};
-
-HIAI_StatusT InitJDEGraph(std::shared_ptr<hiai::Graph> &graph)
-{
-    HIAI_StatusT status = HIAI_Init(DEVICE_ID);
-    if (HIAI_OK != status) {
-        fprintf(stderr, "HIAI_Init fail\n");
-        return status;
-    }
-    
-    status = hiai::Graph::CreateGraph(GRAPH_CONFIG_PATH);
-    if (HIAI_OK != status) {
-        fprintf(stderr, "CreateGraph fail\n");
-        return status;
-    }
-    
-    graph = hiai::Graph::GetInstance(GRAPH_ID);
-    if (nullptr == graph) {
-        fprintf(stderr, "GetInstance fail\n");
-        return HIAI_ERROR;
-    }
-    
-    hiai::EnginePortID outcfg;
-    outcfg.graph_id = GRAPH_ID;
-    outcfg.engine_id = OUTPUT_ENGINE_ID;
-    outcfg.port_id = OUTPUT_PORT_ID;
-    graph->SetDataRecvFunctor(outcfg, std::shared_ptr<JDEDataRecvInterface>(
-        new JDEDataRecvInterface()));
-    
-    return HIAI_OK;
-}
+#include "mot.h"
+#include "datastore.h"
 
 int main(int argc, char *argv[])
 {
-    std::shared_ptr<hiai::Graph> graph;
-    HIAI_StatusT ret = InitJDEGraph(graph);
-    if (HIAI_OK != ret) {
-        fprintf(stderr, "create JDE graph fail\n");
+    if (mot::load_mot_model("")) {
+        fprintf(stderr, "load_mot_model fail\n");
         return -1;
     }
+   
+    int width = 1920;
+    int height = 1080;
+    int stride = width * 3 / 2;
+        
+    std::vector<std::string> fpath;
+    read_path_files("/home/HwHiAiUser/imgs", fpath);
+    std::sort(fpath.begin(), fpath.end());
     
-    hiai::EnginePortID incfg;
-    incfg.graph_id = GRAPH_ID;
-    incfg.engine_id = INPUT_ENGINE_ID;
-    incfg.port_id = INPUT_PORT_ID;
-    
-    std::shared_ptr<std::string> impath = \
-        std::shared_ptr<std::string>(new std::string(TEST_IMG_PATH));
-    graph->SendData(incfg, "string", std::static_pointer_cast<void>(impath));
-    
-    sleep(1);
-    
-    hiai::Graph::DestroyGraph(GRAPH_ID);
+    bool flag = false;
+    mot::MOT_Result result;int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
+    double fontscale = 1;
+    int thickness = 1;    
+
+    for (std::string path : fpath) {
+        struct JpegdOut jpegd_out;
+        jpeg_decode(path, jpegd_out);
+        mot::forward_mot_model((const unsigned char *)jpegd_out.yuvData,
+            jpegd_out.imgWidthAligned, jpegd_out.imgHeightAligned, stride, result);
+
+        cv::Mat bgr = cv::imread(path); 
+        std::vector<mot::MOT_Track>::iterator riter;
+        for (riter = result.begin(); riter != result.end(); riter++) {
+            cv::Point pt1;
+            std::deque<mot::MOT_Rect>::iterator iter;
+            for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++) {
+                int l = static_cast<int>(iter->left);
+                int t = static_cast<int>(iter->top);
+                int r = static_cast<int>(iter->right);
+                int b = static_cast<int>(iter->bottom);
+                
+                if (l == 0 && t == 0 && r == 0 && b == 0) {
+                    break;
+                }
+                
+                if (-1 != riter->identifier) {
+                    srand(riter->identifier);
+                } else {
+                    srand(std::distance(result.begin(), riter));
+                }
+                
+                cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
+                if (iter != riter->rects.begin()) {
+                    cv::Point pt2 = cv::Point((l + r) >> 1, b);
+                    cv::line(bgr, pt1, pt2, color, 2);
+                    pt1 = pt2;
+                    continue;
+                }
+                                
+                cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), color, 2);
+                
+                std::ostringstream oss;
+                oss << riter->identifier;
+                cv::String text = oss.str();
+                
+                int baseline;
+                cv::Size tsize = cv::getTextSize(text, fontface, fontscale, thickness, &baseline);
+                
+                int x = std::min(std::max(l, 0), bgr.cols - tsize.width - 1);
+                int y = std::min(std::max(b - baseline, tsize.height), bgr.rows - baseline - 1);
+                cv::putText(bgr, text, cv::Point(x, y), fontface, fontscale, cv::Scalar(0,255,255), thickness);
+                
+                pt1 = cv::Point((l + r) >> 1, b);
+            }
+        }
+        
+        std::string rpath = path;
+        string_replace(rpath, std::string("imgs"), std::string("results"));        
+        fprintf(stdout, "%s => %s: %lu\n", path.c_str(), rpath.c_str(), result.size());
+        cv::imwrite(rpath, bgr);
+    }
+
+    mot::unload_mot_model();
     
     return 0;
 }

@@ -8,13 +8,7 @@ graphs {
     thread_num: 1
   }
   engines {
-    id: 1002
-    engine_name: "OutputEngine"
-    side: HOST
-    thread_num: 1
-  }
-  engines {
-    id: 1003
+    id: 1001
     engine_name: "JDEngine"
     so_name: "./libJDEngine.so"
     side: DEVICE
@@ -26,17 +20,35 @@ graphs {
       }
     }
   }
+  engines {
+    id: 1002
+    engine_name: "JDEcoderEngine"
+    side: HOST
+    thread_num: 1
+  }
+  engines {
+    id: 1003
+    engine_name: "AssociateEngine"
+    side: HOST
+    thread_num: 1
+  }
 
   connects {
     src_engine_id: 1000
     src_port_id: 0
-    target_engine_id: 1003
+    target_engine_id: 1001
     target_port_id: 0
   }
   connects {
-    src_engine_id: 1003
+    src_engine_id: 1001
     src_port_id: 0
     target_engine_id: 1002
+    target_port_id: 0
+  }
+  connects {
+    src_engine_id: 1002
+    src_port_id: 0
+    target_engine_id: 1003
     target_port_id: 0
   }
 }

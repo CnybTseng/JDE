@@ -9,14 +9,13 @@
 
 #include "dtype.h"
 #include "errcode.h"
-#include "output_engine.h"
+#include "jdecoder_engine.h"
 
 HIAI_REGISTER_DATA_TYPE("IAITensorVector", IAITensorVector);
 HIAI_REGISTER_DATA_TYPE("DetectionVector", DetectionVector);
 
-static void DumpTensor(size_t i, const std::shared_ptr<hiai::AISimpleTensor> &tensor)
+static void DumpTensor(const std::shared_ptr<hiai::AISimpleTensor> &tensor)
 {
-    fprintf(stderr, "output %lu size %u\n", i, tensor->GetSize());
     string path = "./test/data/" + std::to_string(tensor->GetSize()) + ".bin";
     std::ofstream ofs(path, std::ios::binary);
     for (uint32_t i = 0; i < tensor->GetSize(); ++i)
@@ -45,13 +44,38 @@ static inline void SoftmaxInplace(float *X, size_t N)
 static inline void Normalize(float *X, size_t N, float *Y, float eps=1e-12)
 {
     float ssum = 0.f;
-    for (size_t i = 0; i < N; ++i)
+    size_t i = 0;
+
+#if __ARM_NEON && (!DISABLE_NEON)
+    float *ptr1 = X;
+    float32x4_t ssum0 = {0, 0, 0, 0};
+    for (; i < N; i += 4, ptr1 += 4) {
+        float32x4_t x = vld1q_f32(ptr1);
+        vmlaq_f32(ssum0, x, x);
+    }
+
+    float32x2_t ssum1 = vadd_f32(vget_high_f32(ssum0), vget_low_f32(ssum0));
+    ssum += vget_lane_f32(vpadd_f32(ssum1, ssum1), 0);
+#endif    
+
+    for (; i < N; ++i)
         ssum += X[i] * X[i];
     
     ssum = sqrt(ssum);
     float s = ssum > eps ? 1.f / ssum : 1.f / eps;
+    i = 0;
+
+#if __ARM_NEON && (!DISABLE_NEON)
+    ptr1 = X;
+    float *ptr2 = Y;
+    for (; i < N; i += 4, ptr1 += 4, ptr2 += 4) {
+        float32x4_t x = vld1q_f32(ptr1);
+        float32x4_t y = vmulq_n_f32(x, s);
+        vst1q_f32(ptr2, y);
+    }
+#endif
     
-    for (size_t i = 0; i < N; ++i)
+    for (; i < N; ++i)
         Y[i] = s * X[i];
 }
 
@@ -135,7 +159,7 @@ static void NonmaximumSuppression(const std::vector<Detection>& dets, std::vecto
     }
 }
 
-OutputEngine::OutputEngine() : input_queue(OUTPUT_ENGINE_INPUT_SIZE),
+JDEcoderEngine::JDEcoderEngine() : input_queue(JDECODER_ENGINE_INPUT_SIZE),
     num_classes(2), num_boxes(4), conf_thresh(0.5f), iou_thresh(0.4f),
     biases{6, 16, 8, 23, 11, 32, 16, 45, 21, 64, 30, 90, 43, 128,
            60, 180, 85, 255, 120, 360, 170, 420, 340, 320},
@@ -145,7 +169,7 @@ OutputEngine::OutputEngine() : input_queue(OUTPUT_ENGINE_INPUT_SIZE),
     ;
 }
 
-int32_t OutputEngine::DecodeOutput(const std::shared_ptr<hiai::AISimpleTensor> &tensor,
+int32_t JDEcoderEngine::DecodeOutput(const std::shared_ptr<hiai::AISimpleTensor> &tensor,
     int32_t i, std::vector<Detection> &dets)
 {
     float *data = (float *)tensor->GetBuffer();    // NHWC
@@ -156,9 +180,10 @@ int32_t OutputEngine::DecodeOutput(const std::shared_ptr<hiai::AISimpleTensor> &
     const int32_t w = inwidth / stridei;
     const int32_t h = inheight / stridei;
     const int32_t c = embd_offset + EMBD_DIM;
-    fprintf(stderr, "w h c %d %d %d\n", w, h, c);
+
     for (int32_t y = 0; y < h; ++y) {
         for (int32_t x = 0; x < w; ++x) {
+#pragma omp parallel for num_threads(4)
             for (int32_t j = 0; j < num_boxes; ++j) {
                 float *px = data + j * chan_per_box;    // box center x
                 float *py = px + 1;                     // box center y
@@ -172,24 +197,8 @@ int32_t OutputEngine::DecodeOutput(const std::shared_ptr<hiai::AISimpleTensor> &
                 const float biasw = biases[ bias_index << 1];
                 const float biash = biases[(bias_index << 1) + 1];
                 
-                {
-                    if (x == 0 && y == 0) {
-                        for (size_t i = 0; i < num_classes; ++i)
-                            fprintf(stderr, "%f ", pc[i]);
-                        fprintf(stderr, "\n");
-                    }
-                }
-                
                 // class probabilities
                 SoftmaxInplace(pc, num_classes);
-                
-                {
-                    if (x == 0 && y == 0) {
-                        for (size_t i = 0; i < num_classes; ++i)
-                            fprintf(stderr, "%f ", pc[i]);
-                        fprintf(stderr, "\n");
-                    }
-                }
                 
                 // argmax(class probabilities)
                 int32_t category = 0;
@@ -231,7 +240,7 @@ int32_t OutputEngine::DecodeOutput(const std::shared_ptr<hiai::AISimpleTensor> &
     return 0;
 }
 
-HIAI_IMPL_ENGINE_PROCESS("OutputEngine", OutputEngine, OUTPUT_ENGINE_INPUT_SIZE)
+HIAI_IMPL_ENGINE_PROCESS("JDEcoderEngine", JDEcoderEngine, JDECODER_ENGINE_INPUT_SIZE)
 {
     input_queue.PushData(0, arg0);
     std::shared_ptr<IAITensorVector> outputs = \
@@ -246,7 +255,7 @@ HIAI_IMPL_ENGINE_PROCESS("OutputEngine", OutputEngine, OUTPUT_ENGINE_INPUT_SIZE)
     for (size_t i = 0; i < outputs.get()->size(); ++i) {
         std::shared_ptr<hiai::AISimpleTensor> output = \
             std::static_pointer_cast<hiai::AISimpleTensor>((*outputs.get())[i]);
-        DumpTensor(i, output);
+        // DumpTensor(output);
         DecodeOutput(output, i, dets.get()->data);
     }
     
