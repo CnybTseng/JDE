@@ -243,11 +243,17 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
     
     for (size_t i = 0; i < tracks.size(); ++i)
     {
+        MOT_Rect rect = {
+            .top = tracks[i].ltrb[1],
+            .left = tracks[i].ltrb[0],
+            .bottom = tracks[i].ltrb[3],
+            .right = tracks[i].ltrb[2]};
         MOT_Track track = {
             .identifier = tracks[i].id,
             .posture = STANDING,
             .category = std::string(__model.categories[0])};
         track.rects.resize(__model.traj_cache_len);
+        track.rects.push_front(rect);
         result.push_back(track);
     }
     

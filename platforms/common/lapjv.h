@@ -3,9 +3,13 @@
 
 #include <float.h>
 
+#ifdef PYTHON_LAPJV
+
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 #include "Python.h"
+
+#endif  // PYTHON_LAPJV
 
 namespace mot {
 
@@ -19,9 +23,11 @@ public:
     void free(void);
 private:
     static LAPJV *me;
+#ifdef PYTHON_LAPJV
     PyObject *module = 0;
     PyObject *dict = 0;
     PyObject *lapjv = 0;
+#endif  // PYTHON_LAPJV
     LAPJV(void) {}
     ~LAPJV(void) {}
 };

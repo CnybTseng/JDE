@@ -2,15 +2,10 @@ MOT:
     netw: 576
     neth: 320
     traj_cache_len: 30
-    param_path: /home/image/tseng/project/JDE/baseline.param
-    bin_path: /home/image/tseng/project/JDE/baseline.bin
+    param_path: /home/image/tseng/project/JDE/320x576/mot.param
+    bin_path: /home/image/tseng/project/JDE/320x576/mot.bin
     categories:
         - person
-        - hat
-        - head
-        - headwithhat
-        - clothes
-        - working_clothes
     mean_vals: [0, 0, 0]
     norm_vals: [0.0039215686, 0.0039215686, 0.0039215686]
     track_categories:

@@ -10,7 +10,7 @@ import argparse
 import collections
 import torch.onnx as onnx
 import onnxruntime as ort
-
+import numpy as np
 import darknet
 
 def parse_args():
@@ -30,7 +30,7 @@ def parse_args():
 def toonnx(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if not args.full_model:
-        model = darknet.DarkNet().to(device)
+        model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
         model_state_dict = model.state_dict()
         state_dict = torch.load(args.pytorch_model, map_location=device)
         state_dict = {k:v for k,v in state_dict.items() if k in model_state_dict}
