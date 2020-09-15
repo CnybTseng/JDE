@@ -577,6 +577,8 @@ def main(args):
         outputs =  nonmax_suppression(outputs, args.score_thresh, args.iou_thresh)[0]
         if outputs is None:
             print('no object detected!')
+            segments = re.split(r'[\\, /]', path)
+            cv2.imwrite(os.path.join(imgpath, segments[-1]), im)
             continue
         print('{}'.format(outputs.size()), end=' ')
         outputs[:, :4] = ltrb_net2img(outputs[:, :4], (h,w), im.shape[:2])

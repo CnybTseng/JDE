@@ -1,0 +1,114 @@
+ARM ?= 1
+VULKAN ?= 1
+MODEL_PATH ?= model/darknet53/lightly
+GDB ?= 0
+
+ifeq ($(ARM), 1)
+    CXX = g++
+    INSTALL = build/install
+else
+    CXX = /opt/rh/devtoolset-6/root/usr/bin/g++
+    INSTALL = build/install
+endif
+
+THIRDPARTY_LIBS := thirdparty/ncnn/$(INSTALL)/lib/libncnn.a
+THIRDPARTY_LIBS += thirdparty/yaml-cpp/$(INSTALL)/lib/libyaml-cpp.a
+
+THIRDPARTY_LIBS += -L/usr/local/lib64
+
+ifeq ($(VULKAN), 1)
+    THIRDPARTY_LIBS += /usr/local/lib/libglslang.a
+    THIRDPARTY_LIBS += /usr/local/lib/libMachineIndependent.a
+    THIRDPARTY_LIBS += /usr/local/lib/libOSDependent.a
+    THIRDPARTY_LIBS += /usr/local/lib/libOGLCompiler.a
+    THIRDPARTY_LIBS += /usr/local/lib/libGenericCodeGen.a
+    THIRDPARTY_LIBS += /usr/local/lib/libHLSL.a
+    
+    THIRDPARTY_LIBS += /usr/local/lib/libSPIRV.a
+    
+    THIRDPARTY_LIBS += /usr/local/lib/libSPIRV-Tools.a
+    THIRDPARTY_LIBS += /usr/local/lib/libSPIRV-Tools-link.a
+    THIRDPARTY_LIBS += /usr/local/lib/libSPIRV-Tools-opt.a
+    THIRDPARTY_LIBS += /usr/local/lib/libSPIRV-Tools-reduce.a
+    THIRDPARTY_LIBS += /usr/local/lib/libSPVRemapper.a
+    
+    
+    
+    THIRDPARTY_LIBS += -Lthirdparty/glslang/build/install/lib/
+    THIRDPARTY_LIBS += -Lthirdparty/Vulkan-Loader-1.2.151/build/install/lib
+endif
+
+# LDFLAGS := `/usr/local/bin/python3-config --ldflags`
+
+LIBS := $(THIRDPARTY_LIBS)
+LIBS += -lpthread -lm -ldl
+
+ifeq ($(VULKAN), 1)
+    LIBS += -lvulkan -lSPIRV-Tools-shared
+endif
+
+LIBS += -lopencv_core -lopencv_video -lopencv_imgcodecs -lopencv_imgproc
+
+CXXFLAGS := -Isrc
+CXXFLAGS += -Isrc/core
+CXXFLAGS += -I$(MODEL_PATH)
+CXXFLAGS += -I/usr/include/opencv4
+CXXFLAGS += -I/usr/local/include/python3.6m
+CXXFLAGS += -I/home/image/tseng/venv/lib/python3.6/site-packages/numpy/core/include/numpy
+CXXFLAGS += -Ithirdparty/ncnn/$(INSTALL)/include/ncnn/
+CXXFLAGS += -Ithirdparty/libjpeg-turbo/$(INSTALL)/include
+CXXFLAGS += -Ithirdparty/pthreadpool/$(INSTALL)/include
+CXXFLAGS += -Ithirdparty/yaml-cpp/$(INSTALL)/include
+CXXFLAGS += -fopenmp
+CXXFLAGS += -fpermissive
+CXXFLAGS += -fPIC
+CXXFLAGS += -fvisibility=hidden
+CXXFLAGS += -fvisibility-inlines-hidden
+CXXFLAGS += -Wall
+CXXFLAGS += -O3
+
+CXXFLAGS += -DMOT_DLL
+CXXFLAGS += -DPTHREADPOOL_NO_DEPRECATED_API
+
+ifeq ($(VULKAN), 1)
+    CXXFLAGS += -Ithirdparty/thirdparty/glslang/build/install/include
+    CXXFLAGS += -Ithirdparty/Vulkan-Loader-1.2.151/build/install/include
+    CXXFLAGS += -DNCNN_VULKAN
+endif
+
+# CXXFLAGS += `/usr/local/bin/python3-config --cflags`
+
+ifeq ($(GDB), 1)
+    CXXFLAGS += -g
+endif
+
+SRCS := $(wildcard *.cpp)
+SRCS += $(wildcard ./src/*.cpp)
+SRCS += $(wildcard ./src/core/*.cpp)
+TARGET := mot
+
+OBJS := $(SRCS:%.cpp=%.o)
+EXE_OBJS := mot-test.o
+LIB_OBJS := $(filter-out $(EXE_OBJS),$(OBJS))
+SLIB = libmot.so
+
+RPATH := -Wl,-rpath=./
+ifeq ($(VULKAN), 1)
+    RPATH += -Wl,-rpath=thirdparty/Vulkan-Loader-1.2.151/build/install/lib
+endif
+RPATH += -Wl,-rpath=/usr/local/lib64
+
+.PHONY : clean all
+
+all: $(SLIB) $(TARGET)
+
+mot:$(SLIB) mot-test.o
+	@$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) -L. -lmot $(LIBS) $(RPATH)
+
+$(SLIB):$(LIB_OBJS)
+	@$(CXX) $(CXXFLAGS) -DMOT_DLL_EXPORTS -shared -Wl,-soname=libmot.so -o $@ $^ $(LIBS)
+
+clean:
+	@rm -f $(TARGET)
+	@rm -f $(OBJS)
+	@rm -f $(SLIB)

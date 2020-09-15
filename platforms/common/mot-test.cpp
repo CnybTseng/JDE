@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <dirent.h>
 #include <errno.h>
 #include <unistd.h>
@@ -18,6 +19,7 @@ static void log_fprintf(E_CommonLogLevel level, const char * p_log_info, const c
 
 int main(int argc, char *argv[])
 {
+    // 1. 注册日志回调函数, 详情请参考苏永生的日志模块接口文件SH_ImageAlgLogSystem.h
     ImgAlgRegisterLogSystemCallBack((PFUN_LogSystemCallBack)log_fprintf);
     if (argc < 3)
     {
@@ -25,6 +27,7 @@ int main(int argc, char *argv[])
         return -1;
     }
     
+    // 判断用户提供的图像文件目录是否合法
     struct stat statbuf;
     if (0 != stat(argv[2], &statbuf))
     {
@@ -38,33 +41,39 @@ int main(int argc, char *argv[])
         return -1;
     }
     
+    // 创建存放结果的目录
     if (0 != access("./result", F_OK))
     {
         printf("create directory: result\n");
         system("mkdir ./result");
     }
-
+    
+    // 2. 加载MOT模型
     int ret = mot::load_mot_model(argv[1]);
     if (ret)
         return -1;
     
+    // OpenCV绘图相关参数
     mot::MOT_Result result;
     int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
     double fontscale = 1;
     int thickness = 1;
-        
+    
+    // 读取目录中的文件
     dirent **dir = NULL;
     int num = scandir(argv[2], &dir, 0, alphasort);
+    float duration = 0;
     for (int i = 0; i < num; ++i)
     {
+        // 只处理jpg后缀文件
         if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
             continue;
 
         char filein[128] = {0};
         strcat(filein, argv[2]);
         strcat(filein, dir[i]->d_name);
-        fprintf(stdout, "%s\n", filein);
         
+        // 读取图像文件和解码成BGR888
         cv::Mat bgr = cv::imread(filein);
         if (bgr.empty())
         {
@@ -73,9 +82,16 @@ int main(int argc, char *argv[])
         }
         
         cv::Mat rgb;
-        cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
+        cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);  // BGR888转RGB888
+        struct timeval t1, t2;
+        gettimeofday(&t1, NULL);
+        // 3. 执行推理, 检测和跟踪目标
         ret = mot::forward_mot_model(rgb.data, rgb.cols, rgb.rows, rgb.step, result);
+        gettimeofday(&t2, NULL);
+        duration += ((t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec) * 0.001f);
+        fprintf(stdout, "%s %fms\n", filein, duration / (i + 1));
         
+        // 叠加检测和跟踪结果到图像上
         std::vector<mot::MOT_Track>::iterator riter;
         for (riter = result.begin(); riter != result.end(); riter++)
         {
@@ -88,9 +104,11 @@ int main(int argc, char *argv[])
                 int r = static_cast<int>(iter->right);
                 int b = static_cast<int>(iter->bottom);
                 
+                // 过滤无效的检测框
                 if (l == 0 && t == 0 && r == 0 && b == 0)
                     break;
                 
+                // 画轨迹
                 srand(riter->identifier);
                 cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
                 if (iter != riter->rects.begin())
@@ -100,9 +118,11 @@ int main(int argc, char *argv[])
                     pt1 = pt2;
                     continue;
                 }
-                                
+                
+                // 画边框                
                 cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), color, 2);
                 
+                // 叠加轨迹ID号
                 std::ostringstream oss;
                 oss << riter->identifier;
                 cv::String text = oss.str();
@@ -118,6 +138,7 @@ int main(int argc, char *argv[])
             }
         }
         
+        // 保存结果图像
         char fileout[128] = {0};
         strcat(fileout, "./result/");
         strcat(fileout, dir[i]->d_name);
@@ -126,5 +147,6 @@ int main(int argc, char *argv[])
     }
     
     free(dir);
+    // 4. 卸载MOT模型
     mot::unload_mot_model();
 }

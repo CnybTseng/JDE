@@ -51,6 +51,11 @@ if __name__ == '__main__':
         
         strs = label.split(',')
         frame, id, *ltwh, conf, cate, visi = strs
+        
+        l, t, w, h = [float(i) for i in ltwh]
+        if w < args.minw or h < args.minh:
+            continue
+        
         frame = int(frame)
         if not frame in id_dict.keys():
             id_dict[frame] = cnt

@@ -19,6 +19,7 @@ import utils
 import yolov3
 import darknet
 import dataset as ds
+import shufflenetv2
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -76,6 +77,10 @@ def parse_args():
         help='seed number')
     parser.add_argument('--freeze-bn', help='freeze batch norm',
         action='store_true')
+    parser.add_argument('--backbone', type=str, default='darknet',
+        help='backbone arch, default is darknet, candidate is shufflenetv2')
+    parser.add_argument('--thin', type=str, default='2.0x',
+        help='shufflenetv2 thin, default is 2.0x, candidates are 0.5x, 1.0x, 1.5x')
     args = parser.parse_args()
     return args
 
@@ -104,8 +109,14 @@ def train(args):
         pin_memory=args.pin, drop_last=True)
 
     num_ids = dataset.max_id + 2
-    model = darknet.DarkNet(anchors, num_classes=args.num_classes,
-        num_ids=num_ids).to(device)
+    if args.backbone == 'darknet':
+        model = darknet.DarkNet(anchors, num_classes=args.num_classes,
+            num_ids=num_ids).to(device)
+    elif args.backbone == 'shufflenetv2':
+        model = shufflenetv2.ShuffleNetV2(anchors, model_size=args.thin).to(device)
+    else:
+        print('unknown backbone architecture!')
+        sys.exit(0)
     if args.checkpoint:
         model.load_state_dict(torch.load(args.checkpoint))    
     

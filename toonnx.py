@@ -12,6 +12,7 @@ import torch.onnx as onnx
 import onnxruntime as ort
 import numpy as np
 import darknet
+import shufflenetv2
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -25,12 +26,22 @@ def parse_args():
         ', the default value are 320 576')
     parser.add_argument('--full-model', action='store_true',
         help='load full pytorch model, not only state dict')
+    parser.add_argument('--backbone', type=str, default='darknet',
+        help='backbone arch, default is darknet, candidate is shufflenetv2')
+    parser.add_argument('--thin', type=str, default='2.0x',
+        help='shufflenetv2 thin, default is 2.0x, candidates are 0.5x, 1.0x, 1.5x')
     return parser.parse_args()
     
 def toonnx(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if not args.full_model:
-        model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
+        if args.backbone == 'darknet':
+            model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
+        elif args.backbone == 'shufflenetv2':
+            model = shufflenetv2.ShuffleNetV2(np.random.randint(0, 100, (12, 2)), model_size=args.thin).to(device)
+        else:
+            print('unknown backbone architecture!')
+            sys.exit(0)
         model_state_dict = model.state_dict()
         state_dict = torch.load(args.pytorch_model, map_location=device)
         state_dict = {k:v for k,v in state_dict.items() if k in model_state_dict}
@@ -41,8 +52,10 @@ def toonnx(args):
         print('Warning: this function has not been tested yet!')
         model = torch.load(args.pytorch_model)
     
+    model.eval()
     dummy_input = torch.rand(1, 3, args.insize[0], args.insize[1], device=device)
-    onnx.export(model, dummy_input, args.onnx_model, verbose=True, input_names=['data'])
+    onnx.export(model, dummy_input, args.onnx_model, verbose=True, input_names=['data'],
+        output_names=['out1', 'out2', 'out3'])
     
     session = ort.InferenceSession(args.onnx_model)
     outputs = session.run(None, {'data':dummy_input.cpu().numpy()})

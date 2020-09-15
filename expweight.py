@@ -15,7 +15,7 @@ def parse_args():
     return args
 
 def main(args):
-    net = darknet.DarkNet(np.random.randint(0, 100, (12, 2)), num_ids=165)
+    net = darknet.DarkNet(np.random.randint(0, 100, (12, 2)), num_ids=0)
     
     state_dict = torch.load(args.trained_model, map_location=torch.device('cpu'))
     modules = state_dict['model']

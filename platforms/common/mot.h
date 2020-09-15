@@ -35,6 +35,7 @@
 
 namespace mot {
 
+// 目标边框
 struct MOT_Rect
 {
     float top;
@@ -43,26 +44,48 @@ struct MOT_Rect
     float right;
 };
 
+// 弃用
 enum MOT_Posture {
     STANDING,
     LIE_DOWN,
     SQUAT
 };
 
+// 目标跟踪的轨迹
 struct MOT_Track
 {
-    int identifier;
-    MOT_Posture posture;
-    std::string category;
-    std::deque<MOT_Rect> rects;
+    int identifier;                 // 轨迹ID
+    MOT_Posture posture;            // 弃用
+    std::string category;           // 类别, 目前总是'person'
+    std::deque<MOT_Rect> rects;     // 目标边框
 };
 
 typedef std::vector<MOT_Track> MOT_Result;
 
+/**
+ * 加载多目标跟踪模型.
+ * @param cfg_path 配置文件(.yaml)路径
+ * @return  0, 模型加载成功
+ *         -1, 模型加载失败
+ */
 extern "C" MOT_API int load_mot_model(const char *cfg_path);
 
+/**
+ * 卸载多目标跟踪模型.
+ * @return  0, 卸载模型成功
+ */
 extern "C" MOT_API int unload_mot_model();
 
+/**
+ * 执行多目标跟踪.
+ * @param rgb    RGB888格式图像数据
+ * @param width  图像宽度
+ * @param height 图像高度
+ * @param stride 图像扫描行字节步长
+ * @param result 多目标跟踪结果
+ * @return    0, 执行多目标跟踪成功
+ *          非0, 执行多目标跟踪失败
+ */
 extern "C" MOT_API int forward_mot_model(const unsigned char *rgb, int width, int height, int stride, MOT_Result &result);
 
 }   // namespace mot
