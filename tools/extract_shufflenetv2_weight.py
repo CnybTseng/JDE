@@ -37,7 +37,7 @@ if __name__ == '__main__':
     elif '2.0x' in args.src_model:
         model_size = '2.0x'
     
-    anchors = np.random.randint(low=10, high=150, size=(9,2))
+    anchors = np.random.randint(low=10, high=150, size=(12,2))
     model = shufflenetv2.ShuffleNetV2(anchors, num_classes=args.num_classes, num_ids=num_ids, model_size=model_size)
     
     checkpoint = torch.load(args.src_model, map_location='cpu')

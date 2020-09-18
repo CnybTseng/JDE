@@ -58,16 +58,16 @@ class ShuffleNetV2(torch.nn.Module):
         self.anchors = anchors
         self.num_classes = num_classes
         self.detection_channels = (5 + self.num_classes) * 4
-        self.embedding_channels = 128
+        self.embedding_channels = 512
         
         if model_size == '0.5x':
-            self.stage_out_channels = [-1, 24,  48,  96, 192, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 48, 96, 192, 256, 256, 256]
         elif model_size == '1.0x':
-            self.stage_out_channels = [-1, 24, 116, 232, 464, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 116, 232, 464, 256, 256, 256]
         elif model_size == '1.5x':
-            self.stage_out_channels = [-1, 24, 176, 352, 704, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 176, 352, 704, 256, 256, 256]
         elif model_size == '2.0x':
-            self.stage_out_channels = [-1, 24, 244, 488, 976, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 244, 488, 976, 256, 256, 256]
         else:
             raise NotImplementedError
         
@@ -107,72 +107,63 @@ class ShuffleNetV2(torch.nn.Module):
             self.stage4.append(ShuffleNetV2Block(in_channels//2, out_channels, mid_channels=out_channels//2, kernel_size=3, stride=1))   
         self.stage4 = torch.nn.Sequential(*self.stage4)
         
-        # YOLO1 192->256
-        
-        self.stage5 = []
-        in_channels = out_channels
+        # YOLO1
+        # 192->256*10*18
         out_channels = self.stage_out_channels[5]
-        for repeat in range(1):
-            self.stage5.append(ShuffleNetV2Block(in_channels//2, out_channels, mid_channels=out_channels//2, kernel_size=3, stride=1))
-        self.stage5 = torch.nn.Sequential(*self.stage5)
-        in_channels = out_channels
-        
-        # fusion groups
-        self.conv6 = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+        self.conv5 = torch.nn.Sequential(\
+            torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False),
             torch.nn.BatchNorm2d(num_features=out_channels),
-            torch.nn.ReLU(inplace=True)
-        )
-        
-        self.conv11 = torch.nn.Conv2d(in_channels, out_channels=self.detection_channels, kernel_size=3, stride=1, padding=1, bias=True)
-        self.conv12 = torch.nn.Conv2d(in_channels, out_channels=self.embedding_channels, kernel_size=3, stride=1, padding=1, bias=True)
-        
-        # YOLO2 96+256=352->128
-        
-        in_channels = self.stage_out_channels[3] + out_channels
-        out_channels = in_channels
-        self.stage7 = []
-        for repeat in range(1):
-            self.stage7.append(ShuffleNetV2Block(in_channels//2, out_channels, mid_channels=out_channels//2, kernel_size=3, stride=1))
-        self.stage7 = torch.nn.Sequential(*self.stage7)
-        
-        # fusion groups
-        out_channels = self.stage_out_channels[6]
-        self.conv8 = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
-            torch.nn.BatchNorm2d(num_features=out_channels),
-            torch.nn.ReLU(inplace=True)
-        )
-        
+            torch.nn.ReLU(inplace=True))
+        # 256->256*10*18
+        self.stage6 = []
         in_channels = out_channels
-        self.conv13 = torch.nn.Conv2d(in_channels, out_channels=self.detection_channels, kernel_size=3, stride=1, padding=1, bias=True)
+        for repeat in range(1):
+            self.stage6.append(ShuffleNetV2Block(in_channels//2, out_channels, mid_channels=out_channels//2, kernel_size=3, stride=1))
+        self.stage6 = torch.nn.Sequential(*self.stage6)
+        
+        self.conv7  = torch.nn.Conv2d(in_channels, out_channels=self.detection_channels, kernel_size=3, stride=1, padding=1, bias=True)
         self.conv14 = torch.nn.Conv2d(in_channels, out_channels=self.embedding_channels, kernel_size=3, stride=1, padding=1, bias=True)
         
-        # YOLO3 48+128=176->64
-        
-        in_channels = self.stage_out_channels[2] + out_channels
-        out_channels = in_channels
+        # YOLO2
+        # 96->256*20*36
+        in_channels = self.stage_out_channels[3]
+        out_channels = self.stage_out_channels[6]
+        self.conv8 = torch.nn.Sequential(\
+            torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False),
+            torch.nn.BatchNorm2d(num_features=out_channels),
+            torch.nn.ReLU(inplace=True))
+        # 256->256*20*36
         self.stage9 = []
+        in_channels = out_channels
         for repeat in range(1):
             self.stage9.append(ShuffleNetV2Block(in_channels//2, out_channels, mid_channels=out_channels//2, kernel_size=3, stride=1))
         self.stage9 = torch.nn.Sequential(*self.stage9)
         
-        # fusion groups
-        out_channels = self.stage_out_channels[7]
-        self.conv10 = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
-            torch.nn.BatchNorm2d(num_features=out_channels),
-            torch.nn.ReLU(inplace=True)
-        )
+        self.conv10 = torch.nn.Conv2d(in_channels, out_channels=self.detection_channels, kernel_size=3, stride=1, padding=1, bias=True)
+        self.conv15 = torch.nn.Conv2d(in_channels, out_channels=self.embedding_channels, kernel_size=3, stride=1, padding=1, bias=True)
         
+        # YOLO3
+        # 48->256*40*72
+        in_channels = self.stage_out_channels[2]
+        out_channels = self.stage_out_channels[7]
+        self.conv11 = torch.nn.Sequential(\
+            torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False),
+            torch.nn.BatchNorm2d(num_features=out_channels),
+            torch.nn.ReLU(inplace=True))
+        # 256->256*40*72
+        self.stage12 = []
         in_channels = out_channels
-        self.conv15 = torch.nn.Conv2d(in_channels, out_channels=self.detection_channels, kernel_size=3, stride=1, padding=1, bias=True)
+        for repeat in range(1):
+            self.stage12.append(ShuffleNetV2Block(in_channels//2, out_channels, mid_channels=out_channels//2, kernel_size=3, stride=1))
+        self.stage12 = torch.nn.Sequential(*self.stage12)
+        
+        self.conv13 = torch.nn.Conv2d(in_channels, out_channels=self.detection_channels, kernel_size=3, stride=1, padding=1, bias=True)
         self.conv16 = torch.nn.Conv2d(in_channels, out_channels=self.embedding_channels, kernel_size=3, stride=1, padding=1, bias=True)
         
         '''Shared identifiers classifier'''
         
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
-        self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids, embd_dim=self.embedding_channels)
+        self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids)
         
         self.__init_weights()
         
@@ -202,29 +193,29 @@ class ShuffleNetV2(torch.nn.Module):
         x = self.stage4(x)
 
         # YOLO1
-        x = self.stage5(x)
-        x = self.conv6(x)
+        x = self.conv5(x)
+        x = self.stage6(x)
+        # stage6_out = F.interpolate(input=x, scale_factor=2, mode='nearest')
         _, _, h, w = x.size()
-        conv6_out = F.interpolate(input=x, size=(h*2,w*2), mode='nearest')
-        y = self.conv11(x)
-        z = self.conv12(x)
-        outputs.append(torch.cat(tensors=[y, z], dim=1))
-        
-        # YOLO2
-        x = torch.cat([stage3_out, conv6_out], dim=1)
-        x = self.stage7(x)
-        x = self.conv8(x)
-        _, _, h, w = x.size()
-        conv8_out = F.interpolate(input=x, size=(h*2,w*2), mode='nearest')
-        y = self.conv13(x)
+        stage6_out = F.interpolate(input=x, size=(h*2,w*2), mode='nearest')
+        y = self.conv7(x)
         z = self.conv14(x)
         outputs.append(torch.cat(tensors=[y, z], dim=1))
         
+        # YOLO2
+        x = self.conv8(stage3_out)
+        x = self.stage9(x + stage6_out)
+        # stage9_out = F.interpolate(input=x, scale_factor=2, mode='nearest')
+        _, _, h, w = x.size()
+        stage9_out = F.interpolate(input=x, size=(h*2,w*2), mode='nearest')
+        y = self.conv10(x)
+        z = self.conv15(x)
+        outputs.append(torch.cat(tensors=[y, z], dim=1))
+        
         # YOLO3
-        x = torch.cat([stage2_out, conv8_out], dim=1)
-        x = self.stage9(x)
-        x = self.conv10(x)
-        y = self.conv15(x)
+        x = self.conv11(stage2_out)
+        x = self.stage12(x + stage9_out)
+        y = self.conv13(x)
         z = self.conv16(x)
         outputs.append(torch.cat(tensors=[y, z], dim=1))
         
@@ -234,10 +225,10 @@ class ShuffleNetV2(torch.nn.Module):
         return outputs
 
 if __name__ == '__main__':
-    anchors = np.random.randint(low=10, high=150, size=(12,2))
-    model = ShuffleNetV2(anchors, model_size='0.5x')
+    anchors = np.random.randint(low=10, high=150, size=(9,2))
+    model = ShuffleNetV2(anchors, model_size='2.0x')
     model.eval()
-    x = torch.rand(1, 3, 320, 576)
+    x = torch.rand(1, 3, 416, 416)
     ys = model(x)
     for i,y in enumerate(ys):
         print(f'the {i+1}th output size is {y.size()}')

@@ -115,9 +115,9 @@ class YOLOv3Loss(YOLOv3SingleDecoder):
         anchors:
         classifier:
     '''
-    def __init__(self, num_classes, anchors, num_idents):
+    def __init__(self, num_classes, anchors, num_idents, embd_dim=512):
         super(YOLOv3Loss, self).__init__((608,1088), num_classes, anchors,
-            embd_dim=512)
+            embd_dim=embd_dim)
         self.num_idents = num_idents        
         self.sbs = nn.Parameter(torch.FloatTensor([-4.85, -4.85, -4.85]))
         self.scs = nn.Parameter(torch.FloatTensor([-4.15, -4.15, -4.15]))

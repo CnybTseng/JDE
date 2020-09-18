@@ -123,7 +123,7 @@ class CustomDataset(object):
         #     target = torch.FloatTensor(0, 7)
         
         from xxx import LoadImagesAndLabels
-        loader = LoadImagesAndLabels()
+        loader = LoadImagesAndLabels(augment=True)
         image, labels, _, _ = loader.get_data(image_path, annocation_path)
         
         target = []

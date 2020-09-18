@@ -42,12 +42,13 @@ def toonnx(args):
         else:
             print('unknown backbone architecture!')
             sys.exit(0)
-        model_state_dict = model.state_dict()
-        state_dict = torch.load(args.pytorch_model, map_location=device)
-        state_dict = {k:v for k,v in state_dict.items() if k in model_state_dict}
-        state_dict = collections.OrderedDict(state_dict)
-        model_state_dict.update(state_dict)
-        model.load_state_dict(model_state_dict)
+        if args.pytorch_model:
+            model_state_dict = model.state_dict()
+            state_dict = torch.load(args.pytorch_model, map_location=device)
+            state_dict = {k:v for k,v in state_dict.items() if k in model_state_dict}
+            state_dict = collections.OrderedDict(state_dict)
+            model_state_dict.update(state_dict)
+            model.load_state_dict(model_state_dict)
     else:
         print('Warning: this function has not been tested yet!')
         model = torch.load(args.pytorch_model)
@@ -55,7 +56,7 @@ def toonnx(args):
     model.eval()
     dummy_input = torch.rand(1, 3, args.insize[0], args.insize[1], device=device)
     onnx.export(model, dummy_input, args.onnx_model, verbose=True, input_names=['data'],
-        output_names=['out1', 'out2', 'out3'])
+        output_names=['out1', 'out2', 'out3'], opset_version=11)
     
     session = ort.InferenceSession(args.onnx_model)
     outputs = session.run(None, {'data':dummy_input.cpu().numpy()})

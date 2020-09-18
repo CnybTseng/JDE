@@ -15,6 +15,7 @@ import kalman
 import yolov3
 import darknet
 import dataset
+import shufflenetv2
 
 def parse_args():
     '''解析命令行参数
@@ -32,6 +33,12 @@ def parse_args():
         help='nms iou threshold, default=0.4, it must be in [0,1]')
     parser.add_argument('--only-detect', action='store_true',
         help='only detecting object, no tracking')
+    parser.add_argument('--backbone', type=str, default='darknet',
+        help='backbone arch, default is darknet, candidate is shufflenetv2')
+    parser.add_argument('--thin', type=str, default='2.0x',
+        help='shufflenetv2 thin, default is 2.0x, candidates are 0.5x, 1.0x, 1.5x')
+    parser.add_argument('--embedding', '-emd', type=int, default=512,
+        help='embedding dimension, default is 512')
     return parser.parse_args()
 
 def mkdir(path):
@@ -532,7 +539,14 @@ def save_trajectories(path, trajectories, frame_id):
 
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
+    if args.backbone == 'darknet':
+        model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
+    elif args.backbone == 'shufflenetv2':
+        model = shufflenetv2.ShuffleNetV2(np.random.randint(0, 100, (12, 2)),
+            model_size=args.thin).to(device)
+    else:
+        print('unknown backbone architecture!')
+        sys.exit(0)
     
     # load state dict except the classifier layer
     model_dict = model.state_dict()
@@ -558,7 +572,7 @@ def main(args):
                    (128,384), (180,540), (256,640), (512,640))
 
     h, w = [int(s) for s in args.insize.split('x')]
-    decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors)
+    decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors, embd_dim=args.embedding)
     tracker = JDETracker()
     dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
     

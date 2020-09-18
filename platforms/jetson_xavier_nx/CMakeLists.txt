@@ -14,6 +14,8 @@ link_directories(
     /usr/lib/aarch64-linux-gnu
 )
 
+add_definitions(-std=c++11 -O3)
+
 FILE(GLOB_RECURSE cpps src/*.cpp)
 add_executable(jde ${cpps})
 target_link_libraries(

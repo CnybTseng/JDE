@@ -3,6 +3,8 @@
 
 #include <NvInfer.h>
 
+#define NUM_BINDINGS    4
+
 namespace mot {
 
 class JDE
@@ -18,7 +20,8 @@ private:
     nvinfer1::ICudaEngine* engine;
     nvinfer1::IExecutionContext* context;
     cudaStream_t stream;
-    void *buffers[4];
+    void *bindings[NUM_BINDINGS];
+    size_t binding_sizes[NUM_BINDINGS];
     bool build_onnx_model(void);
     JDE(void) {};
     ~JDE() {};

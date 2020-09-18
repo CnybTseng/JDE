@@ -113,7 +113,8 @@ def train(args):
         model = darknet.DarkNet(anchors, num_classes=args.num_classes,
             num_ids=num_ids).to(device)
     elif args.backbone == 'shufflenetv2':
-        model = shufflenetv2.ShuffleNetV2(anchors, model_size=args.thin).to(device)
+        model = shufflenetv2.ShuffleNetV2(anchors, num_classes=args.num_classes,
+            num_ids=num_ids, model_size=args.thin).to(device)
     else:
         print('unknown backbone architecture!')
         sys.exit(0)

@@ -23,17 +23,20 @@ int main(int argc, char *argv[])
     
     float latency = 0;    
     for (int i = 0; i < loops; ++i) {
+#ifndef PROFILE
         auto start = std::chrono::system_clock::now();
         status = mot::JDE::instance()->infer(in, out);
+#endif
         if (!status) {
             std::cout << "infer JDE fail" << std::endl;
             return 0;
         }
+#ifndef PROFILE
         auto end = std::chrono::system_clock::now();
         latency = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        latency /= loops;
         std::cout << "latency is " << latency << "ms" << std::endl;
-    }
+#endif
+    }   
     
     status = mot::JDE::instance()->destroy();
     if (!status) {
