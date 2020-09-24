@@ -130,3 +130,5 @@ dmypy.json
 
 baseline
 result
+platforms/mot4j/doc
+platforms/mot4j/ims

@@ -95,7 +95,7 @@ public class test
             String result = handle.forward_mot_model(rgb, im.getWidth(), im.getHeight(), stride);
             
             // 拿着跟踪结果去绘图, 或抠图, 或啥的......
-            // System.out.println(result);                
+            System.out.println(result);                
             try
             {
                 JSONArray array = new JSONArray(result);                
@@ -104,7 +104,7 @@ public class test
                     JSONObject jobj = array.getJSONObject(j);
                     int identifier = jobj.getInt("identifier");     // 目标轨迹ID
                     String category = jobj.getString("category");   // 目标类别
-                    JSONArray rects = jobj.getJSONArray("rects");   // 目标边框集和
+                    JSONArray rects = jobj.getJSONArray("rects");   // 目标边框集合
                     System.out.printf("%d, %s:\n", identifier, category);
                     for (int k = 0; k < rects.length(); k++)
                     {
