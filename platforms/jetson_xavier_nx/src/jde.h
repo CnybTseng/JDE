@@ -22,7 +22,8 @@ private:
     cudaStream_t stream;
     void *bindings[NUM_BINDINGS];
     size_t binding_sizes[NUM_BINDINGS];
-    bool build_onnx_model(void);
+    bool create_network_from_scratch(void);
+    bool create_network_from_parser(void);
     JDE(void) {};
     ~JDE() {};
 };

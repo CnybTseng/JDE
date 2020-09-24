@@ -172,7 +172,7 @@ class ShuffleNetV2(torch.nn.Module):
         '''Shared identifiers classifier'''
         
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
-        self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids, embd_dim=self.embedding_channels)
+        self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids, embd_dim=self.embedding_channels) if num_ids > 0 else torch.nn.Sequential()
         
         self.__init_weights()
         

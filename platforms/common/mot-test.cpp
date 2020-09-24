@@ -45,7 +45,11 @@ int main(int argc, char *argv[])
     if (0 != access("./result", F_OK))
     {
         printf("create directory: result\n");
-        system("mkdir ./result");
+        if (-1 == system("mkdir ./result"))
+        {
+            fprintf(stderr, "mkdir fail\n");
+            return -1;
+        }
     }
     
     // 2. 加载MOT模型

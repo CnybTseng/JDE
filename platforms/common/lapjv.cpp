@@ -31,15 +31,6 @@
 #define PRINT_COST_ARRAY(a, n)
 #define PRINT_INDEX_ARRAY(a, n)
 
-#define matrix_set_roi(data, x1, y1, x2, y2, val)   \
-do {                                                \
-    for (size_t i = y1; i < y2; ++i) {              \
-        for (size_t j = x1; j < x2; ++j) {          \
-            data[i][j] = val;                       \
-        }                                           \
-    }                                               \
-} while (0)
-
 typedef signed int int_t;
 typedef unsigned int uint_t;
 typedef double cost_t;
@@ -51,6 +42,15 @@ typedef enum fp_t { FP_1 = 1, FP_2 = 2, FP_DYNAMIC = 3 } fp_t;
 #include "lapjv.h"
 
 namespace mot {
+
+static inline void matrix_set_roi(double **data, int x1, int y1, int x2, int y2, double val)
+{
+    for (int i = y1; i < y2; ++i) {        
+        for (int j = x1; j < x2; ++j) {    
+            data[i][j] = val;                 
+        }                                     
+    }  
+}
 
 LAPJV* LAPJV::me = 0;
 
@@ -500,7 +500,7 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
         }
         
         float maxele = -999999;
-        for (size_t i = 0; i < rows * cols; ++i) {
+        for (int i = 0; i < rows * cols; ++i) {
             if (cost[i] > maxele) {
                 maxele = cost[i];
             }
@@ -509,7 +509,7 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
         if (cost_limit < FLT_MAX) {
             dim = size << 1;
             extd_cost = (double **)calloc(dim, sizeof(double *));
-            for (size_t i = 0; i < dim; ++i) {
+            for (int i = 0; i < dim; ++i) {
                 extd_cost[i] = (double *)calloc(dim, sizeof(double));
             }
             
@@ -524,7 +524,7 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
         } else {
             dim = size;
             extd_cost = (double **)calloc(dim, sizeof(double *));
-            for (size_t i = 0; i < dim; ++i) {
+            for (int i = 0; i < dim; ++i) {
                 extd_cost[i] = (double *)calloc(dim, sizeof(double));
             }
             
@@ -542,7 +542,7 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
         }
         
         extd_cost = (double **)calloc(dim, sizeof(double *));
-        for (size_t i = 0; i < dim; ++i) {
+        for (int i = 0; i < dim; ++i) {
             extd_cost[i] = (double *)calloc(dim, sizeof(double));
         }
         
@@ -552,8 +552,8 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
         }
     }
     
-    for (size_t i = 0; i < rows; ++i) {
-        for (size_t j = 0; j < cols; ++j) {
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
             extd_cost[i][j] = cost[i * cols + j];
         }
     }
@@ -565,42 +565,42 @@ bool LAPJV::solve(const float *cost, int rows, int cols, float *opt, int *x,
     
     *opt = 0;
     if (cost_limit < FLT_MAX || extend_cost) {
-        for (size_t i = 0; i < dim; ++i) {
+        for (int i = 0; i < dim; ++i) {
             if (extd_x[i] >= cols) {
                 extd_x[i] = -1;
             }
         }
-        for (size_t i = 0; i < dim; ++i) {
+        for (int i = 0; i < dim; ++i) {
             if (extd_y[i] >= rows) {
                 extd_y[i] = -1;
             }
         }
-        for (size_t i = 0; i < rows; ++i) {
+        for (int i = 0; i < rows; ++i) {
             x[i] = extd_x[i];
         }
-        for (size_t i = 0; i < cols; ++i) {
+        for (int i = 0; i < cols; ++i) {
             y[i] = extd_y[i];
         }
         
-        for (size_t i = 0; i < rows; ++i) {
+        for (int i = 0; i < rows; ++i) {
             if (-1 != x[i]) {
                 *opt += cost[i * cols + x[i]];
             }
         }
     } else {
-        for (size_t i = 0; i < rows; ++i) {
+        for (int i = 0; i < rows; ++i) {
             x[i] = extd_x[i];
         }
-        for (size_t i = 0; i < cols; ++i) {
+        for (int i = 0; i < cols; ++i) {
             y[i] = extd_y[i];
         }
         
-        for (size_t i = 0; i < rows; ++i) {
+        for (int i = 0; i < rows; ++i) {
             *opt += cost[i * cols + x[i]];
         }
     }
     
-    for (size_t i = 0; i < dim; ++i) {
+    for (int i = 0; i < dim; ++i) {
         std::free(extd_cost[i]);
         extd_cost[i] = NULL;
     }

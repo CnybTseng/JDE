@@ -196,8 +196,8 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
     ncnn::Mat in = ncnn::Mat::from_pixels_resize(rgb, ncnn::Mat::PIXEL_RGB, width, height, __model.netw, __model.neth);
     in.substract_mean_normalize(__model.means, __model.norms);
     
-    struct timeval t1, t2;
-    gettimeofday(&t1, NULL);
+    // struct timeval t1, t2;
+    // gettimeofday(&t1, NULL);
     
     ncnn::Extractor ext = __model.jde->create_extractor();
     ext.set_num_threads(6);        
@@ -206,8 +206,8 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
     ncnn::Mat out;
     ext.extract("detout", out);
     
-    gettimeofday(&t2, NULL);
-    fprintf(stdout, "inference %fms\n", (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec) * 0.001f);
+    // gettimeofday(&t2, NULL);
+    // fprintf(stdout, "inference %fms\n", (t2.tv_sec - t1.tv_sec) * 1000 + (t2.tv_usec - t1.tv_usec) * 0.001f);
     // gettimeofday(&t1, NULL);
     
     for (int i = 0; i < out.h; ++i)
@@ -257,7 +257,6 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
             .right = tracks[i].ltrb[2]};
         MOT_Track track = {
             .identifier = tracks[i].id,
-            .posture = STANDING,
             .category = std::string(__model.categories[0])};
         track.rects.resize(__model.traj_cache_len);
         track.rects.push_front(rect);

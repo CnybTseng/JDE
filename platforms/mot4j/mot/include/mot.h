@@ -1,3 +1,22 @@
+/******************************************************************************
+
+                  版权所有 (C), 2004-2020, 成都思晗科技股份有限公司
+
+ ******************************************************************************
+  文 件 名   : mot.h
+  版 本 号   : 初稿
+  作    者   : Zeng Zhiwei
+  生成日期   : 2020年9月24日
+  最近修改   :
+  功能描述   : 多目标跟踪
+  
+  修改历史   :
+  1.日    期   : 2020年9月24日
+    作    者   : Zeng Zhiwei
+    修改内容   : 创建文件
+
+******************************************************************************/
+
 #ifndef MOT_H
 #define MOT_H
 
@@ -55,7 +74,7 @@ struct MOT_Track
 typedef std::vector<MOT_Track> MOT_Result;
 
 /**
- * 加载多目标跟踪模型.
+ * @brief 加载多目标跟踪模型.
  * @param cfg_path 配置文件(.yaml)路径
  * @return  0, 模型加载成功
  *         -1, 模型加载失败
@@ -63,13 +82,14 @@ typedef std::vector<MOT_Track> MOT_Result;
 extern "C" MOT_API int load_mot_model(const char *cfg_path);
 
 /**
- * 卸载多目标跟踪模型.
+ * @brief 卸载多目标跟踪模型.
  * @return  0, 卸载模型成功
+ *         -1, 卸载模型失败
  */
 extern "C" MOT_API int unload_mot_model();
 
 /**
- * 执行多目标跟踪.
+ * @brief 执行多目标跟踪.
  * @param rgb    RGB888格式图像数据
  * @param width  图像宽度
  * @param height 图像高度

@@ -9,6 +9,14 @@
 
 #include <NvInfer.h>
 
+#define SAFETY_FREE(mem)    \
+do {                        \
+    if (mem) {              \
+        free(mem);          \
+        mem = nullptr;      \
+    }                       \
+} while (0)
+
 namespace mot {
 
 struct InferDeleter
@@ -117,7 +125,7 @@ constexpr long long int operator""_MiB(long long unsigned int val)
 }
 
 // 重载cout打印nvinfer1::Dims型变量
-std::ostream& operator<<(std::ostream& os, nvinfer1::Dims& dims)
+std::ostream& operator<<(std::ostream& os, nvinfer1::Dims dims)
 {
     for (int i = 0; i < dims.nbDims - 1; ++i) {
         os << dims.d[i] << "x";
