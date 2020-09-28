@@ -1,8 +1,11 @@
+import os
 import torch
 import struct
 import argparse
 import collections
 import numpy as np
+import torch.onnx as onnx
+import onnxruntime as ort
 
 import darknet
 import shufflenetv2
@@ -43,6 +46,8 @@ if __name__ == '__main__':
         model.load_state_dict(state_dict)
     
     model.eval()
+    path, filename = os.path.split(args.wts)
+    torch.save(model.state_dict(), os.path.join(path, 'model.pth'));
     
     # write layer name and corresponding weidhts to .wts file
     file = open(args.wts, 'w')
@@ -55,3 +60,13 @@ if __name__ == '__main__':
             file.write(' ')
             file.write(struct.pack('>f', float(w)).hex())
         file.write('\n')
+    
+    onnx_model = os.path.join(path, 'model.onnx')
+    dummy_input = torch.rand(1, 3, 320, 576)
+    onnx.export(model, dummy_input, onnx_model, verbose=True, input_names=['data'],
+        output_names=['out1', 'out2', 'out3'], opset_version=11)
+    
+    session = ort.InferenceSession(onnx_model)
+    outputs = session.run(None, {'data':dummy_input.cpu().numpy()})
+    for i, output in enumerate(outputs):
+        print('branch {} output size is {}'.format(i, output.shape))

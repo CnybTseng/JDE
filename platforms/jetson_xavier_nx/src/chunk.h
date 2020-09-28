@@ -1,6 +1,7 @@
 #ifndef CHUNK_H_
 #define CHUNK_H_
-
+#include <fstream>
+#include <vector>
 #include <string>
 #include <NvInfer.h>
 
@@ -10,7 +11,7 @@ class ChunkPlugin : public IPluginV2IOExt
 {
 public:
     ChunkPlugin() {};
-    ChunkPlugin(int32_t chunk_sizee) : chunk_size(chunk_sizee) {};
+    ChunkPlugin(int32_t chunkSize) : mChunkSize(chunkSize) {};
     ChunkPlugin(const void* data, size_t size);
     ~ChunkPlugin() override = default;
     
@@ -49,24 +50,27 @@ public:
     bool supportsFormatCombination(int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs,
         int32_t nbOutputs) const override;
 private:
-    int32_t chunk_size;
-    std::string plugin_namespace;
+    int32_t mChunkSize;
+    std::string mPluginNamespace;
 };
 
 class ChunkPluginCreator : public IPluginCreator
 {
 public:
+    ChunkPluginCreator();
+    ~ChunkPluginCreator() {};
     const char* getPluginName() const override;
     const char* getPluginVersion() const override;
     const PluginFieldCollection* getFieldNames() override;
-    IPluginV2* createPlugin(const char* name, const PluginFieldCollection* fc) override;
-    IPluginV2* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
+    IPluginV2IOExt* createPlugin(const char* name, const PluginFieldCollection* fc) override;
+    IPluginV2IOExt* deserializePlugin(const char* name, const void* serialData, size_t serialLength) override;
     void setPluginNamespace(const char* libNamespace) override;
     const char* getPluginNamespace() const override;
 private:
-    std::string plugin_name;
-    std::string plugin_namespace;
-    PluginFieldCollection plugin_field_collection;
+    int32_t mChunkSize;
+    std::string mPluginNamespace;
+    static std::vector<PluginField> mPluginAttributes;
+    static PluginFieldCollection mPluginFieldCollection;
 };
 
 REGISTER_TENSORRT_PLUGIN(ChunkPluginCreator);

@@ -1,16 +1,37 @@
 #include <cassert>
+#include <cstring>
+#include <fstream>
 #include <iostream>
+
+#include <NvInferPlugin.h>
 #include <cuda_runtime_api.h>
 
 #include "chunk.h"
 
 namespace nvinfer1 {
 
+template <typename T>
+void write(char*& buffer, const T& data)
+{
+    *reinterpret_cast<T*>(buffer) = data;
+    buffer += sizeof(data);
+}
+
+template <typename T>
+T read(const char*& buffer)
+{
+    T data = *reinterpret_cast<const T*>(buffer);
+    buffer += sizeof(T);
+    return data;
+}
+
 // 运行时从字节流创建插件
 ChunkPlugin::ChunkPlugin(const void* data, size_t size)
 {
-    assert(size == sizeof(chunk_size));
-    chunk_size = *reinterpret_cast<const int32_t*>(data);
+    const char* p = reinterpret_cast<const char*>(data);
+    const char* b = p;
+    mChunkSize = read<int32_t>(p);
+    assert(p == b + size);
 }
 
 const char* ChunkPlugin::getPluginType() const
@@ -55,9 +76,9 @@ Dims ChunkPlugin::getOutputDimensions(int32_t index, const Dims* inputs, int32_t
 // void ChunkPlugin::configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
 //     DataType type, PluginFormat format, int32_t maxBatchSize)
 // {
-//     chunk_size = (inputDims[0].d[0] >> 1) * inputDims[0].d[1] * inputDims[0].d[2] * sizeof(float);
+//     mChunkSize = (inputDims[0].d[0] >> 1) * inputDims[0].d[1] * inputDims[0].d[2] * sizeof(float);
 //     if (DataType::kHALF == type) {
-//         chunk_size = (chunk_size >> 1);
+//         mChunkSize = (mChunkSize >> 1);
 //     }
 // }
 
@@ -78,29 +99,33 @@ size_t ChunkPlugin::getWorkspaceSize(int32_t maxBatchSize) const
 int32_t ChunkPlugin::enqueue(int32_t batchSize, const void* const* inputs, void** outputs, void* workspace,
     cudaStream_t stream)
 {
-    if (cudaSuccess != cudaMemcpy(outputs[0], inputs[0], chunk_size, cudaMemcpyDeviceToDevice)) {
+    if (cudaSuccess != cudaMemcpy(outputs[0], inputs[0], mChunkSize, cudaMemcpyDeviceToDevice)) {
         std::cout << "cudaMemcpy fail" << std::endl;
     }
-    if (cudaSuccess != cudaMemcpy(outputs[1], (void*)((char*)inputs[0] + chunk_size),
-        chunk_size, cudaMemcpyDeviceToDevice)) {
+    if (cudaSuccess != cudaMemcpy(outputs[1], (void*)((char*)inputs[0] + mChunkSize),
+        mChunkSize, cudaMemcpyDeviceToDevice)) {
         std::cout << "cudaMemcpy fail" << std::endl;
     }
+    
     return 0;
 }
 
 size_t ChunkPlugin::getSerializationSize() const
 {
-    return sizeof(chunk_size);
+    return sizeof(mChunkSize);
 }
 
 void ChunkPlugin::serialize(void* buffer) const
 {
-    *reinterpret_cast<int32_t*>(buffer) = chunk_size;
+    char* p = reinterpret_cast<char*>(buffer);
+    char* b = p;
+    write(p, mChunkSize);
+    assert(p == b + getSerializationSize());
 }
 
 void ChunkPlugin::destroy()
 {
-    delete this;
+    // delete this;
 }
 
 // IPluginV2* ChunkPlugin::clone() const
@@ -111,12 +136,12 @@ void ChunkPlugin::destroy()
 
 void ChunkPlugin::setPluginNamespace(const char* pluginNamespace)
 {
-    plugin_namespace = pluginNamespace;
+    mPluginNamespace = pluginNamespace;
 }
 
 const char* ChunkPlugin::getPluginNamespace() const
 {
-    return plugin_namespace.data();
+    return mPluginNamespace.c_str();
 }
 
 DataType ChunkPlugin::getOutputDataType(int32_t index, const DataType* inputTypes,
@@ -124,7 +149,7 @@ DataType ChunkPlugin::getOutputDataType(int32_t index, const DataType* inputType
 {
     assert(0 == index || 1 == index);
     assert(1 == nbInputs);
-    return inputTypes[index];
+    return inputTypes[0];
 }
 
 bool ChunkPlugin::isOutputBroadcastAcrossBatch(int32_t outputIndex, const bool* inputIsBroadcasted,
@@ -147,17 +172,21 @@ void ChunkPlugin::detachFromContext()
 
 IPluginV2Ext* ChunkPlugin::clone() const
 {
-    auto* plugin = new ChunkPlugin(*this);
-    return plugin;
+    return new ChunkPlugin(*this);
 }
 
 void ChunkPlugin::configurePlugin(const PluginTensorDesc* in, int32_t nbInput, const PluginTensorDesc* out,
     int32_t nbOutput)
-{
-    chunk_size = (in[0].dims.d[0] >> 1) * in[0].dims.d[1] * in[0].dims.d[2] * sizeof(float);
+{    
+    mChunkSize = sizeof(float);
+    for (int i = 0; i < in[0].dims.nbDims; ++i) {
+        mChunkSize *= in[0].dims.d[i];
+    }
+    
+    mChunkSize = mChunkSize >> 1;    
     if (DataType::kHALF == in[0].type) {
-        chunk_size = (chunk_size >> 1);
-    }    
+        mChunkSize = (mChunkSize >> 1);
+    }
 }
 
 bool ChunkPlugin::supportsFormatCombination(int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs,
@@ -178,6 +207,17 @@ bool ChunkPlugin::supportsFormatCombination(int32_t pos, const PluginTensorDesc*
         && PluginFormat::kNCHW == inOut[pos].format;
 }
 
+std::vector<PluginField> ChunkPluginCreator::mPluginAttributes;
+PluginFieldCollection ChunkPluginCreator::mPluginFieldCollection{};
+
+ChunkPluginCreator::ChunkPluginCreator()
+{
+    mPluginAttributes.emplace_back(
+        PluginField("chunkSize", nullptr, PluginFieldType::kINT32, 1));
+    mPluginFieldCollection.nbFields = mPluginAttributes.size();
+    mPluginFieldCollection.fields = mPluginAttributes.data();
+}
+
 const char* ChunkPluginCreator::getPluginName() const
 {
     return "Chunk";
@@ -190,43 +230,38 @@ const char* ChunkPluginCreator::getPluginVersion() const
 
 const PluginFieldCollection* ChunkPluginCreator::getFieldNames()
 {
-    return &plugin_field_collection;
+    return &mPluginFieldCollection;
 }
 
-IPluginV2* ChunkPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+IPluginV2IOExt* ChunkPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
 {
-    auto plugin = new ChunkPlugin();
-    plugin_field_collection = *fc;
-    plugin_name = name;
-    return plugin;
+    const PluginField* fields = fc->fields;
+    for (int i = 0; i < fc->nbFields; ++i)
+    {
+        const char* name = fields[i].name;
+        if (!strcmp(name, "chunkSize"))
+        {
+            assert(fields[i].type == PluginFieldType::kINT32);
+            mChunkSize = *static_cast<const int32_t*>(fields[i].data);
+        }
+    }
+    
+    return new ChunkPlugin(mChunkSize);
 }
 
-IPluginV2* ChunkPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+IPluginV2IOExt* ChunkPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
 {
-    auto plugin = new ChunkPlugin(serialData, serialLength);
-    plugin_name = name;
-    return plugin;
+    return new ChunkPlugin(serialData, serialLength);
 }
 
 void ChunkPluginCreator::setPluginNamespace(const char* libNamespace)
 {
-    plugin_namespace = libNamespace;
+    mPluginNamespace = libNamespace;
 }
 
 const char* ChunkPluginCreator::getPluginNamespace() const
 {
-    return plugin_namespace.c_str();
+    return mPluginNamespace.c_str();
 }
-
-
-
-
-
-
-
-
-
-
-
 
 }   // namespace nvinfer1
