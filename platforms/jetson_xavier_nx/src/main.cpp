@@ -23,12 +23,17 @@ int main(int argc, char *argv[])
         loops = atoi(argv[1]);
     }
     
+    int index = 0;
+    if (argc > 2) {
+        index = atoi(argv[2]);
+    }
+    
     // Allocate input buffer.
     mot::DimsX dims0 = mot::JDE::instance()->get_binding_dims(0);
     std::shared_ptr<float> in(new float[dims0.numel()]);
     
     // Allocate output buffer.
-    mot::DimsX dims1 = mot::JDE::instance()->get_binding_dims(1);
+    mot::DimsX dims1 = mot::JDE::instance()->get_binding_dims(index + 1);
     std::vector<std::shared_ptr<float>> out(3);
     for (int i = 0; i < out.size(); ++i) {
         mot::DimsX dims = mot::JDE::instance()->get_binding_dims(i + 1);
@@ -48,7 +53,7 @@ int main(int argc, char *argv[])
     float latency = 0;    
     for (int i = 0; i < loops; ++i) {
 #ifndef PROFILE
-        auto start = std::chrono::system_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
         status = mot::JDE::instance()->infer(in, out);
 #endif
         if (!status) {
@@ -56,14 +61,14 @@ int main(int argc, char *argv[])
             return 0;
         }
 #ifndef PROFILE
-        auto end = std::chrono::system_clock::now();
-        latency = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        auto end = std::chrono::high_resolution_clock::now();
+        latency = std::chrono::duration<float, std::milli>(end - start).count();
         std::cout << "latency is " << latency << "ms" << std::endl;
 #endif
-        // Save output for comparing with pytorch baseline
+        // Saving output for comparing with pytorch baseline
         if (0 == i) {
             std::ofstream ofs("out.bin", std::ios::binary);
-            ofs.write(reinterpret_cast<char*>(out[0].get()), dims1.numel() * sizeof(float));
+            ofs.write(reinterpret_cast<char*>(out[index].get()), dims1.numel() * sizeof(float));
             ofs.close();
         }
     }   

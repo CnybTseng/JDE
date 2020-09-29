@@ -2,6 +2,7 @@
 #define JDE_H_
 
 #include <vector>
+#include <memory>
 #include <NvInfer.h>
 
 #define NUM_BINDINGS    4

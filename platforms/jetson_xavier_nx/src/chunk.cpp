@@ -125,7 +125,7 @@ void ChunkPlugin::serialize(void* buffer) const
 
 void ChunkPlugin::destroy()
 {
-    // delete this;
+    delete this;
 }
 
 // IPluginV2* ChunkPlugin::clone() const

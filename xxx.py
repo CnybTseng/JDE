@@ -102,9 +102,13 @@ class LoadImagesAndLabels:  # for training
                 if nL > 0:
                     labels[:, 2] = 1 - labels[:, 2]
        
-        img = np.ascontiguousarray(img[ :, :, ::-1]) # BGR to RGB
+        # img = np.ascontiguousarray(img[ :, :, ::-1]) # BGR to RGB
         if self.transforms is not None:
+            img = np.ascontiguousarray(img[ :, :, ::-1]) # BGR to RGB
             img = self.transforms(img)
+        else:
+            img = np.ascontiguousarray(img.transpose(2, 0, 1))
+            img = torch.from_numpy(img).float()
 
         return img, labels, img_path, (h, w)
 

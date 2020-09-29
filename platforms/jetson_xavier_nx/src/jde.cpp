@@ -254,7 +254,13 @@ bool JDE::create_network_from_scratch(void)
     conv12->setPaddingNd(nvinfer1::Dims2{1,1});
     nvinfer1::ITensor* output1_[] = {conv11->getOutput(0), conv12->getOutput(0)};
     auto output1 = network->addConcatenation(output1_, 2);
+#if 0
     network->markOutput(*output1->getOutput(0));
+#else
+    auto output1_nhwc = network->addShuffle(*output1->getOutput(0));
+    output1_nhwc->setFirstTranspose(nvinfer1::Permutation{0, 2, 3, 1});
+    network->markOutput(*output1_nhwc->getOutput(0));
+#endif
     
     // stage7
     const float scales[] = {1.f, 1.f, 2.f, 2.f};
@@ -283,7 +289,13 @@ bool JDE::create_network_from_scratch(void)
     conv14->setPaddingNd(nvinfer1::Dims2{1,1});
     nvinfer1::ITensor* output2_[] = {conv13->getOutput(0), conv14->getOutput(0)};
     auto output2 = network->addConcatenation(output2_, 2);
+#if 0
     network->markOutput(*output2->getOutput(0));
+#else
+    auto output2_nhwc = network->addShuffle(*output2->getOutput(0));
+    output2_nhwc->setFirstTranspose(nvinfer1::Permutation{0, 2, 3, 1});
+    network->markOutput(*output2_nhwc->getOutput(0));
+#endif
         
     // stage9
     auto upsp2 = network->addResize(*relu8->getOutput(0));
@@ -311,7 +323,13 @@ bool JDE::create_network_from_scratch(void)
     conv16->setPaddingNd(nvinfer1::Dims2{1,1});
     nvinfer1::ITensor* output3_[] = {conv15->getOutput(0), conv16->getOutput(0)};
     auto output3 = network->addConcatenation(output3_, 2);
+#if 0
     network->markOutput(*output3->getOutput(0));
+#else
+    auto output3_nhwc = network->addShuffle(*output3->getOutput(0));
+    output3_nhwc->setFirstTranspose(nvinfer1::Permutation{0, 2, 3, 1});
+    network->markOutput(*output3_nhwc->getOutput(0));
+#endif
 
     builder->setMaxBatchSize(1);
     config->setMaxWorkspaceSize(10_MiB);

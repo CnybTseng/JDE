@@ -45,7 +45,7 @@ class ImagesLoader(object):
         insize (tuple): 神经网络输入大小, insize=(height, width)
         formats (list of str): 需要解码的图像格式列表
     '''
-    def __init__(self, path, insize, formats=['*.jpg']):
+    def __init__(self, path, insize, formats=['*.jpg'], backbone='shufflenetv2'):
         if os.path.isdir(path):
             self.files = []
             for format in formats:
@@ -54,6 +54,7 @@ class ImagesLoader(object):
             self.files = [path]
         self.insize = insize
         self.count = 0
+        self.backbone = backbone
 
     def __iter__(self):
         self.count = -1
@@ -67,9 +68,13 @@ class ImagesLoader(object):
         im = cv2.imread(path)
         assert im is not None, 'cv2.imread{} fail'.format(path)
         lb_im, s, dx, dy = letterbox_image(im, insize=self.insize)
-        lb_im = lb_im[...,::-1].transpose(2, 0, 1)
-        lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
-        lb_im /= 255.0
+        if self.backbone is 'darknet':
+            lb_im = lb_im[...,::-1].transpose(2, 0, 1)
+            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
+            lb_im /= 255.0
+        else:
+            lb_im = lb_im.transpose(2, 0, 1)
+            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
         return path, im, lb_im
 
 def get_transform(train, net_w=416, net_h=416):
@@ -97,12 +102,13 @@ def collate_fn(batch, in_size=torch.IntTensor([416,416]), train=False):
     return torch.stack(tensors=images, dim=0), torch.cat(tensors=targets, dim=0)
 
 class CustomDataset(object):
-    def __init__(self, root, file='train'):
+    def __init__(self, root, file='train', backbone='shufflenetv2'):
         self.root = root
         path = open(os.path.join(root, f'{file}.txt')).read().split()
         self.images_path = path[0::2]
         self.annocations_path = path[1::2]
         self._max_id = self._get_max_id()
+        self.backbone = backbone
 
     def __getitem__(self, index):
         image_path = self.images_path[index]
@@ -123,7 +129,11 @@ class CustomDataset(object):
         #     target = torch.FloatTensor(0, 7)
         
         from xxx import LoadImagesAndLabels
-        loader = LoadImagesAndLabels(augment=True)
+        
+        if self.backbone is 'darknet':
+            loader = LoadImagesAndLabels()
+        else:
+            loader = LoadImagesAndLabels(transforms=None)
         image, labels, _, _ = loader.get_data(image_path, annocation_path)
         
         target = []

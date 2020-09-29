@@ -19,6 +19,8 @@ if __name__ == '__main__':
         help='path to the input tensor')
     parser.add_argument('--output', type=str,
         help='path to the tensorrt inference output tensor')
+    parser.add_argument('--index', type=int, default=0,
+        help='the output index')
     args = parser.parse_args()
     
     anchors = ((6,16),   (8,23),    (11,32),   (16,45),
@@ -37,15 +39,12 @@ if __name__ == '__main__':
     model.eval()
     
     x = torch.from_numpy(np.fromfile(args.input, np.float32)).view(1, 3, 320, 576)
-    y = torch.from_numpy(np.fromfile(args.output, np.float32)).view(1, 152, 10, 18)
-    print('{}'.format(x[0,0,0,:10]))
-    print('{}'.format(y[0,0,:,:]))
+    y = torch.from_numpy(np.fromfile(args.output, np.float32))
     
     with torch.no_grad():
         ys = model(x)
     for yi in ys:
         print('{}'.format(yi.size()))
-    
-    print('{}'.format(ys[0][0,0,:,:]))
-    delta = torch.abs(y - ys[0])
+
+    delta = torch.abs(y - ys[args.index].permute(0, 2, 3, 1).contiguous().view(-1))
     print('output error:{} {} {}'.format(delta.min(), delta.max(), delta.mean()))

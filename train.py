@@ -102,7 +102,7 @@ def train(args):
     
     torch.backends.cudnn.benchmark = True
     
-    dataset = ds.CustomDataset(args.dataset, 'train')
+    dataset = ds.CustomDataset(args.dataset, 'train', args.backbone)
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
         True, num_workers=args.workers, collate_fn=collate_fn,
