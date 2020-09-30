@@ -52,19 +52,17 @@ int main(int argc, char *argv[])
     
     float latency = 0;    
     for (int i = 0; i < loops; ++i) {
-#ifndef PROFILE
         auto start = std::chrono::high_resolution_clock::now();
         status = mot::JDE::instance()->infer(in, out);
-#endif
         if (!status) {
             std::cout << "infer JDE fail" << std::endl;
             return 0;
         }
-#ifndef PROFILE
+
         auto end = std::chrono::high_resolution_clock::now();
         latency = std::chrono::duration<float, std::milli>(end - start).count();
         std::cout << "latency is " << latency << "ms" << std::endl;
-#endif
+
         // Saving output for comparing with pytorch baseline
         if (0 == i) {
             std::ofstream ofs("out.bin", std::ios::binary);
