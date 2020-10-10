@@ -1,4 +1,5 @@
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
@@ -129,7 +130,7 @@ int unload_mot_model()
 int forward_mot_model(const unsigned char *rgb, int width, int height, int stride, MOT_Result &result)
 {
     SimpleProfiler profiler("mot");
-    auto start_latency = std::chrono::high_resolution_clock::now();
+    auto start_prep = std::chrono::high_resolution_clock::now();
     
     // Resize the image to the neural network input size.
     cv::Mat src(height, width, CV_8UC3, const_cast<unsigned char*>(rgb));
@@ -152,7 +153,7 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
     rszim_chw.convertTo(in, CV_32FC3, 1.f / 255);
    
     profiler.reportLayerTime("image preprocessing", std::chrono::duration<float, std::milli>(
-        std::chrono::high_resolution_clock::now() - start_latency).count());
+        std::chrono::high_resolution_clock::now() - start_prep).count());
     auto start_jde = std::chrono::high_resolution_clock::now();
     
     // Neural network inference.
@@ -164,6 +165,18 @@ int forward_mot_model(const unsigned char *rgb, int width, int height, int strid
 
     profiler.reportLayerTime("JDE inference", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - start_jde).count());
+    
+    // Test jdecoderv2
+    {
+        for (int i = 0; i < __model.out.size(); ++i) {
+            std::ofstream ofs("out" + std::to_string(i) + ".bin", std::ios::binary);
+            mot::DimsX dims = mot::JDE::instance()->get_binding_dims(i + 1);
+            ofs.write(reinterpret_cast<char*>(__model.out[i].get()), dims.numel() * sizeof(float));
+            ofs.close();
+        }
+        cv::imwrite("input.jpg", rszim_hwc);
+    }    
+    
     auto start_jdec = std::chrono::high_resolution_clock::now();
     
     // Decode neural network outputs.

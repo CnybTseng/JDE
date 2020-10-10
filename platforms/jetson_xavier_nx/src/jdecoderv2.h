@@ -17,7 +17,7 @@ static constexpr int netInHeight     = 320;     //! network input height
 static constexpr int boxDim          = 4;       //! left, top, right, bottom
 static constexpr int classDim        = 2;       //! class identifier, class score
 static constexpr int embeDim         = 128;     //! embedding vector dimension
-static constexpr int maxNumOutputBox = 1000;    //! maximum number of output boxes per head
+static constexpr int maxNumOutputBox = 1024;    //! maximum number of output boxes per head
 
 struct JDecKernel
 {
@@ -48,7 +48,7 @@ static constexpr JDecKernel jdk3 = {
 static constexpr int decInputDim = numAnchor * (boxDim + numClass) + embeDim;
 
 //! JDE decoder output dimension
-static constexpr int decOutputDim = numAnchor * (boxDim + classDim) + embeDim;
+static constexpr int decOutputDim = boxDim + classDim + embeDim;
 
 }   // namespace jdec
 
@@ -57,6 +57,7 @@ class JDecoderV2
 public:
     JDecoderV2();
     ~JDecoderV2();
+    void forward_test(const float* const* in, float* out, cudaStream_t stream, int batchSize=1);
 private:
     //! \brief JDE output decoder forward.
     //!
@@ -65,7 +66,7 @@ private:
     //!  tensors is NHWC.
     //!
     //! \param out Decoder output. The output is a N by 134 matrix, and N is the
-    //!  maximum number of decoding outputs. By default, N is 1000.
+    //!  maximum number of decoding outputs. By default, N is 1024.
     //!
     //! \param stream
     //!
@@ -77,6 +78,7 @@ private:
     int32_t mNumThread;
     int32_t mNumClass;
     int32_t mNumKernel;
+    float   mConfThresh;
     std::vector<jdec::JDecKernel> mJDecKernel;
     
     //!  These parameters will not be serialized.

@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstdio>
 #include <float.h>
 #include <iostream>
@@ -6,6 +7,7 @@
 #include <cmath>
 #include <arm_neon.h>
 
+#include "utils.h"
 #include "jdecoder.h"
 
 namespace mot {
@@ -36,7 +38,7 @@ static inline void Normalize(float *X, size_t N, float *Y, float eps=1e-12)
 #if __ARM_NEON && (!DISABLE_NEON)
     float *ptr1 = X;
     float32x4_t ssum0 = {0, 0, 0, 0};
-    for (; i < N; i += 4, ptr1 += 4) {
+    for (; i < N - 4; i += 4, ptr1 += 4) {
         float32x4_t x = vld1q_f32(ptr1);
         vmlaq_f32(ssum0, x, x);
     }
@@ -55,7 +57,7 @@ static inline void Normalize(float *X, size_t N, float *Y, float eps=1e-12)
 #if __ARM_NEON && (!DISABLE_NEON)
     ptr1 = X;
     float *ptr2 = Y;
-    for (; i < N; i += 4, ptr1 += 4, ptr2 += 4) {
+    for (; i < N - 4; i += 4, ptr1 += 4, ptr2 += 4) {
         float32x4_t x = vld1q_f32(ptr1);
         float32x4_t y = vmulq_n_f32(x, s);
         vst1q_f32(ptr2, y);
@@ -163,6 +165,8 @@ bool JDecoder::init(void)
 
 bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detection>& dets)
 {
+    mot::SimpleProfiler profiler("JDecoder");
+    auto start_decode = std::chrono::high_resolution_clock::now();
     std::vector<Detection> rawdets;
     for (int i = 0; i < in.size(); ++i) {
         float *data = in[i].get();    // NHWC
@@ -178,12 +182,12 @@ bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detect
             for (int32_t x = 0; x < w; ++x) {
     #pragma omp parallel for num_threads(4)
                 for (int32_t j = 0; j < num_boxes; ++j) {
-                    float *px = data + j * chan_per_box;    // box center x
-                    float *py = px + 1;                     // box center y
-                    float *pw = py + 1;                     // box width
-                    float *ph = pw + 1;                     // box height
-                    float *pc = ph + 1;                     // class logits
-                    float *pe = pc + num_classes;           // embedding vector
+                    float *px = data + j * chan_per_box;            // box center x
+                    float *py = px + 1;                             // box center y
+                    float *pw = py + 1;                             // box width
+                    float *ph = pw + 1;                             // box height
+                    float *pc = ph + 1;                             // class logits
+                    float *pe = data + num_boxes * chan_per_box;    // embedding vector
                     
                     // a prior anchor parameters
                     int32_t bias_index = static_cast<int>(masks[mask_offset + j]);
@@ -230,6 +234,10 @@ bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detect
             }
         }
     }
+    
+    profiler.reportLayerTime("decode", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_decode).count());
+    std::cout << profiler << std::endl;
     
     QsortDescentInplace(rawdets);    
     std::vector<size_t> keeps;

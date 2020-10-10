@@ -1,4 +1,5 @@
 #include <ctime>
+#include <string>
 #include <chrono>
 #include <memory>
 #include <cstdlib>
@@ -23,17 +24,11 @@ int main(int argc, char *argv[])
         loops = atoi(argv[1]);
     }
     
-    int index = 0;
-    if (argc > 2) {
-        index = atoi(argv[2]);
-    }
-    
     // Allocate input buffer.
     mot::DimsX dims0 = mot::JDE::instance()->get_binding_dims(0);
     std::shared_ptr<float> in(new float[dims0.numel()]);
     
     // Allocate output buffer.
-    mot::DimsX dims1 = mot::JDE::instance()->get_binding_dims(index + 1);
     std::vector<std::shared_ptr<float>> out(3);
     for (int i = 0; i < out.size(); ++i) {
         mot::DimsX dims = mot::JDE::instance()->get_binding_dims(i + 1);
@@ -65,9 +60,12 @@ int main(int argc, char *argv[])
 
         // Saving output for comparing with pytorch baseline
         if (0 == i) {
-            std::ofstream ofs("out.bin", std::ios::binary);
-            ofs.write(reinterpret_cast<char*>(out[index].get()), dims1.numel() * sizeof(float));
-            ofs.close();
+            for (int i = 0; i < out.size(); ++i) {
+                std::ofstream ofs("out" + std::to_string(i) + ".bin", std::ios::binary);
+                mot::DimsX dims = mot::JDE::instance()->get_binding_dims(i + 1);
+                ofs.write(reinterpret_cast<char*>(out[i].get()), dims.numel() * sizeof(float));
+                ofs.close();
+            }
         }
     }   
     
