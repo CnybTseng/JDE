@@ -15,7 +15,7 @@ import kalman
 import yolov3
 import darknet
 import dataset
-import shufflenetv2
+import shufflenetv2v2 as shufflenetv2
 
 def parse_args():
     '''解析命令行参数

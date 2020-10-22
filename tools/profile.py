@@ -13,7 +13,7 @@ sys.path.append('.')
 import darknet
 import argparse
 import collections
-import shufflenetv2
+import shufflenetv2v2 as shufflenetv2
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

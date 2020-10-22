@@ -14,6 +14,13 @@
   1.日    期   : 2020年9月24日
     作    者   : Zeng Zhiwei
     修改内容   : 创建文件
+  
+  2.日    期   : 2020年10月15日
+    作    者   : Zeng Zhiwei
+    修改内容   : <1> forward_mot_model()输入图像的格式由RGB888修改为BGR888.
+                 <2> 算法核心由ncnn框架切换为TensorRT框架, 更好地利用GPU的算力.
+                 <3> 算法核心的多线程支持.
+                 <4> 算法核心只返回当前帧的跟踪结果.
 
 ******************************************************************************/
 
@@ -90,7 +97,7 @@ extern "C" MOT_API int unload_mot_model();
 
 /**
  * @brief 执行多目标跟踪.
- * @param rgb    RGB888格式图像数据
+ * @param data   BGR888格式图像数据
  * @param width  图像宽度
  * @param height 图像高度
  * @param stride 图像扫描行字节步长
@@ -98,7 +105,7 @@ extern "C" MOT_API int unload_mot_model();
  * @return    0, 执行多目标跟踪成功
  *          非0, 执行多目标跟踪失败
  */
-extern "C" MOT_API int forward_mot_model(const unsigned char *rgb, int width, int height, int stride, MOT_Result &result);
+extern "C" MOT_API int forward_mot_model(const unsigned char *data, int width, int height, int stride, MOT_Result &result);
 
 }   // namespace mot
 

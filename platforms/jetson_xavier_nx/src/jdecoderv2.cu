@@ -1,8 +1,11 @@
 #include <float.h>
 #include <stdio.h>
+#include <assert.h>
 #include <helper_math.h>
+#include <NvInferPlugin.h>
 #include <cuda_runtime_api.h>
 
+#include "utils.h"
 #include "jdecoderv2.h"
 
 namespace nvinfer1 {
@@ -139,7 +142,22 @@ __global__ void forward_kernel(const float* const in, float* out, int inWidth, i
     }
 }
 
-JDecoderV2::JDecoderV2()
+template <typename T>
+static void write(char*& buffer, const T& data)
+{
+    *reinterpret_cast<T*>(buffer) = data;
+    buffer += sizeof(data);
+}
+
+template <typename T>
+static T read(const char*& buffer)
+{
+    T data = *reinterpret_cast<const T*>(buffer);
+    buffer += sizeof(T);
+    return data;
+}
+
+JDecoderPlugin::JDecoderPlugin()
 {
     mNumThread = 64;
     mNumClass = jdec::numClass;
@@ -159,23 +177,180 @@ JDecoderV2::JDecoderV2()
     mConfThresh = 0.5f;
 }
 
-JDecoderV2::~JDecoderV2()
+JDecoderPlugin::JDecoderPlugin(const void* data, size_t size)
+{
+    const char* p = reinterpret_cast<const char*>(data);
+    const char* b = p;
+    mNumThread = read<int32_t>(p);
+    mNumClass = read<int32_t>(p);
+    mNumKernel = read<int32_t>(p);
+    mConfThresh = read<float>(p);
+    mJDecKernel.resize(mNumKernel);
+    size_t kernelSize = mNumKernel * sizeof(jdec::JDecKernel);
+    memcpy(mJDecKernel.data(), p, kernelSize);
+    p += kernelSize;
+    assert(p == b + size);
+    
+    mGpuAnchor.resize(mNumKernel);
+    for (size_t i = 0; i < mGpuAnchor.size(); ++i) {
+        cudaMalloc(&mGpuAnchor[i], sizeof(mJDecKernel[i].anchor));
+        cudaMemcpy(mGpuAnchor[i], mJDecKernel[i].anchor, sizeof(mJDecKernel[i].anchor), cudaMemcpyHostToDevice);
+    }
+}
+
+JDecoderPlugin::~JDecoderPlugin()
 {
     for (size_t i = 0; i < mGpuAnchor.size(); ++i) {
         cudaFree(mGpuAnchor[i]);
     }
 }
 
-void JDecoderV2::forward_test(const float* const* in, float* out, cudaStream_t stream, int batchSize)
+const char* JDecoderPlugin::getPluginType() const
+{
+    return "JDecoderPlugin";
+}
+
+const char* JDecoderPlugin::getPluginVersion() const
+{
+    return "100";
+}
+
+int32_t JDecoderPlugin::getNbOutputs() const
+{
+    return 1;
+}
+
+Dims JDecoderPlugin::getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims)
+{
+    assert(0 == index);
+    assert(3 == nbInputDims);
+    int numel = numel_after_align(jdec::maxNumOutputBox * jdec::decOutputDim + 1, sizeof(float), 8);
+    return Dims3(numel, 1, 1);
+}
+
+int32_t JDecoderPlugin::initialize()
+{
+    return 0;
+}
+
+void JDecoderPlugin::terminate()
+{
+}
+
+size_t JDecoderPlugin::getWorkspaceSize(int32_t maxBatchSize) const
+{
+    return 0;
+}
+
+int32_t JDecoderPlugin::enqueue(int32_t batchSize, const void* const* inputs, void** outputs, void* workspace,
+    cudaStream_t stream)
+{
+    forward((const float* const*)inputs, (float*)outputs[0], stream, batchSize);
+    return 0;
+}
+
+size_t JDecoderPlugin::getSerializationSize() const
+{
+    return sizeof(mNumThread) + sizeof(mNumClass) + sizeof(mNumKernel) +
+        sizeof(mConfThresh) + mNumKernel * sizeof(jdec::JDecKernel);
+}
+
+void JDecoderPlugin::serialize(void* buffer) const
+{
+    char* p = reinterpret_cast<char*>(buffer);
+    char* b = p;
+    write<int32_t>(p, mNumThread);
+    write<int32_t>(p, mNumClass);
+    write<int32_t>(p, mNumKernel);
+    write<float>(p, mConfThresh);
+    size_t kernelSize = mNumKernel * sizeof(jdec::JDecKernel);
+    memcpy(p, mJDecKernel.data(), kernelSize);
+    p += kernelSize;
+    assert(p == b + getSerializationSize());
+}
+
+void JDecoderPlugin::destroy()
+{
+    delete this;
+}
+
+void JDecoderPlugin::setPluginNamespace(const char* pluginNamespace)
+{
+    mPluginNamespace = pluginNamespace;
+}
+
+const char* JDecoderPlugin::getPluginNamespace() const
+{
+    return mPluginNamespace.c_str();
+}
+
+nvinfer1::DataType JDecoderPlugin::getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes,
+    int32_t nbInputs) const
+{
+    assert(0 == index);
+    assert(3 == nbInputs);
+    return inputTypes[0];
+}
+
+bool JDecoderPlugin::isOutputBroadcastAcrossBatch(int32_t outputIndex, const bool* inputIsBroadcasted,
+    int32_t nbInputs) const
+{
+    return false;
+}
+
+bool JDecoderPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const
+{
+    return false;
+}
+
+void JDecoderPlugin::attachToContext(cudnnContext*, cublasContext*, IGpuAllocator*)
+{
+}
+
+void JDecoderPlugin::detachFromContext()
+{
+}
+
+IPluginV2Ext* JDecoderPlugin::clone() const
+{
+    JDecoderPlugin* p = new JDecoderPlugin();
+    p->setPluginNamespace(mPluginNamespace.c_str());
+    return p;
+}
+
+void JDecoderPlugin::configurePlugin(const PluginTensorDesc* in, int32_t nbInput, const PluginTensorDesc* out,
+    int32_t nbOutput)
+{
+}
+
+bool JDecoderPlugin::supportsFormatCombination(int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs,
+    int32_t nbOutputs) const
+{
+    int device;
+    auto ret = cudaGetDevice(&device);
+    if (0 != ret) {
+        fprintf(stderr, "cudaGetDevice fail\n");
+        abort();
+    }
+
+    cudaDeviceProp props;
+    cudaGetDeviceProperties(&props, device);
+    int sm_version = props.major << 8 | props.minor;
+
+    return (DataType::kFLOAT == inOut[pos].type || (DataType::kHALF == inOut[pos].type && sm_version >= 0x600))
+        && PluginFormat::kLINEAR == inOut[pos].format;
+}
+
+void JDecoderPlugin::forward_test(const float* const* in, float* out, cudaStream_t stream, int batchSize)
 {
     forward(in, out, stream, batchSize);
 }
 
-void JDecoderV2::forward(const float* const* in, float* out, cudaStream_t stream, int batchSize)
+void JDecoderPlugin::forward(const float* const* in, float* out, cudaStream_t stream, int batchSize)
 {
     // The first element of buffer is the number of valid boxes.
     // So we only need to set the first element as zero.
-    size_t outStride = jdec::maxNumOutputBox * jdec::decOutputDim + 2;
+    size_t outStride = numel_after_align(jdec::maxNumOutputBox * jdec::decOutputDim + 1, sizeof(float), 8);
     for (int i = 0; i < batchSize; ++i) {
         cudaMemset(out + i * outStride, 0, sizeof(float2));
     }
@@ -189,9 +364,56 @@ void JDecoderV2::forward(const float* const* in, float* out, cudaStream_t stream
         
         int numBlocks = (inSize + numThread - 1) / numThread;
         int blockSize = numThread;
-        forward_kernel<<<numBlocks, blockSize>>>(in[j], out, mJDecKernel[j].inWidth, mJDecKernel[j].inHeight,
+        forward_kernel<<<numBlocks, blockSize, 0, stream>>>(in[j], out, mJDecKernel[j].inWidth, mJDecKernel[j].inHeight,
             inSize, jdec::decOutputDim, jdec::maxNumOutputBox, mNumClass, (float*)mGpuAnchor[j], mConfThresh);
     }
+    cudaStreamSynchronize(stream);
+}
+
+JDecoderPluginCreator::JDecoderPluginCreator()
+{
+    mPluginAttributes.clear();
+    mPluginFieldCollection.nbFields = mPluginAttributes.size();
+    mPluginFieldCollection.fields = mPluginAttributes.data();
+}
+
+const char* JDecoderPluginCreator::getPluginName() const
+{
+    return "JDecoderPlugin";
+}
+
+const char* JDecoderPluginCreator::getPluginVersion() const
+{
+    return "100";
+}
+
+const PluginFieldCollection* JDecoderPluginCreator::getFieldNames()
+{
+    return &mPluginFieldCollection;
+}
+
+IPluginV2IOExt* JDecoderPluginCreator::createPlugin(const char* name, const PluginFieldCollection* fc)
+{
+    JDecoderPlugin* p = new JDecoderPlugin();
+    p->setPluginNamespace(mPluginNamespace.c_str());
+    return p;
+}
+
+IPluginV2IOExt* JDecoderPluginCreator::deserializePlugin(const char* name, const void* serialData, size_t serialLength)
+{
+    JDecoderPlugin* p = new JDecoderPlugin(serialData, serialLength);
+    p->setPluginNamespace(mPluginNamespace.c_str());
+    return p;
+}
+
+void JDecoderPluginCreator::setPluginNamespace(const char* libNamespace)
+{
+    mPluginNamespace = libNamespace;
+}
+
+const char* JDecoderPluginCreator::getPluginNamespace() const
+{
+    return mPluginNamespace.c_str();
 }
 
 }   // namespace nvinfer1

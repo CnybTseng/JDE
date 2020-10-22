@@ -1,3 +1,4 @@
+#include <omp.h>
 #include <chrono>
 #include <cstdio>
 #include <float.h>
@@ -107,7 +108,7 @@ static void QsortDescentInplace(std::vector<Detection>& data, int left, int righ
         QsortDescentInplace(data, i, right);
 }
 
-static void QsortDescentInplace(std::vector<Detection>& data)
+void QsortDescentInplace(std::vector<Detection>& data)
 {
     if (data.empty())
         return;
@@ -115,7 +116,7 @@ static void QsortDescentInplace(std::vector<Detection>& data)
     QsortDescentInplace(data, 0, static_cast<int>(data.size() - 1));
 }
 
-static void NonmaximumSuppression(const std::vector<Detection>& dets, std::vector<size_t>& keeps, float iou_thresh)
+void NonmaximumSuppression(const std::vector<Detection>& dets, std::vector<size_t>& keeps, float iou_thresh)
 {
     keeps.clear();
     const size_t n = dets.size();
@@ -165,9 +166,12 @@ bool JDecoder::init(void)
 
 bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detection>& dets)
 {
-    mot::SimpleProfiler profiler("JDecoder");
+#if PROFILE_DECODER
     auto start_decode = std::chrono::high_resolution_clock::now();
+#endif
     std::vector<Detection> rawdets;
+    std::vector<std::vector<Detection>> rawdetvec(in.size());
+#pragma omp parallel for num_threads(3)
     for (int i = 0; i < in.size(); ++i) {
         float *data = in[i].get();    // NHWC
         const int32_t chan_per_box = 4 + num_classes;
@@ -180,7 +184,6 @@ bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detect
 
         for (int32_t y = 0; y < h; ++y) {
             for (int32_t x = 0; x < w; ++x) {
-    #pragma omp parallel for num_threads(4)
                 for (int32_t j = 0; j < num_boxes; ++j) {
                     float *px = data + j * chan_per_box;            // box center x
                     float *py = px + 1;                             // box center y
@@ -215,7 +218,7 @@ bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detect
                         float bh = static_cast<float>(biash * expf(ph[0]));
                         
                         Detection det = {
-                            .category = category,
+                            .category = static_cast<float>(category),
                             .score = score,
                             .bbox = {
                                 .top = by - bh * 0.5f,
@@ -227,22 +230,33 @@ bool JDecoder::infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detect
                         };
                         
                         Normalize(pe, EMBD_DIM, det.embedding);
-                        rawdets.push_back(det);
+                        rawdetvec[i].push_back(det);
                     }
                 }
                 data += c;
             }
         }
     }
-    
+    for (size_t i = 0; i < rawdetvec.size(); ++i) {
+        rawdets.insert(rawdets.end(), rawdetvec[i].begin(), rawdetvec[i].end());
+    }
+#if PROFILE_DECODER    
     profiler.reportLayerTime("decode", std::chrono::duration<float, std::milli>(
-        std::chrono::high_resolution_clock::now() - start_decode).count());
-    std::cout << profiler << std::endl;
-    
-    QsortDescentInplace(rawdets);    
+        std::chrono::high_resolution_clock::now() - start_decode).count());    
+    auto start_qsort = std::chrono::high_resolution_clock::now();
+#endif    
+    QsortDescentInplace(rawdets);
+#if PROFILE_DECODER    
+    profiler.reportLayerTime("qsort", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_qsort).count());    
+    auto start_nms = std::chrono::high_resolution_clock::now();
+#endif    
     std::vector<size_t> keeps;
     NonmaximumSuppression(rawdets, keeps, iou_thresh);
-    
+#if PROFILE_DECODER    
+    profiler.reportLayerTime("nms", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_nms).count());
+#endif    
     int num_dets = static_cast<int>(keeps.size());
     for (int i = 0; i < num_dets; ++i)
         dets.push_back(rawdets[keeps[i]]);

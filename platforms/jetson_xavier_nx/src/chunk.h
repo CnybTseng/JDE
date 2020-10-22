@@ -1,8 +1,10 @@
 #ifndef CHUNK_H_
 #define CHUNK_H_
-#include <fstream>
+
 #include <vector>
 #include <string>
+#include <fstream>
+
 #include <NvInfer.h>
 
 namespace nvinfer1 {
@@ -15,14 +17,11 @@ public:
     ChunkPlugin(const void* data, size_t size);
     ~ChunkPlugin() override = default;
     
-    // inherit form IPluginV2
+    // Inherit form IPluginV2
     const char* getPluginType() const override;
     const char* getPluginVersion() const override;
     int32_t getNbOutputs() const override;
     Dims getOutputDimensions(int32_t index, const Dims* inputs, int32_t nbInputDims) override;
-    // bool supportsFormat(DataType type, PluginFormat format) const override;
-    // void configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
-    //     DataType type, PluginFormat format, int32_t maxBatchSize) override;
     int32_t initialize() override;
     void terminate() override;
     size_t getWorkspaceSize(int32_t maxBatchSize) const override;
@@ -31,11 +30,10 @@ public:
     size_t getSerializationSize() const override;
     void serialize(void* buffer) const override;
     void destroy() override;
-    // IPluginV2* clone() const override;
     void setPluginNamespace(const char* pluginNamespace) override;
     const char* getPluginNamespace() const override;
 
-    // inherit from IPluginV2Ext
+    // Inherit from IPluginV2Ext
     nvinfer1::DataType getOutputDataType(int32_t index, const nvinfer1::DataType* inputTypes,
         int32_t nbInputs) const override;
     bool isOutputBroadcastAcrossBatch(int32_t outputIndex, const bool* inputIsBroadcasted,
@@ -45,6 +43,7 @@ public:
     void detachFromContext() override;
     IPluginV2Ext* clone() const override;
     
+    // Inherit from IPluginV2IOExt
     void configurePlugin(const PluginTensorDesc* in, int32_t nbInput, const PluginTensorDesc* out,
         int32_t nbOutput) override;
     bool supportsFormatCombination(int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs,

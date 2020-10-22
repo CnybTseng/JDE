@@ -14,6 +14,11 @@
   1.日    期   : 2020年9月24日
     作    者   : Zeng Zhiwei
     修改内容   : 创建文件
+  
+  2.日    期   : 2020年10月15日
+    作    者   : Zeng Zhiwei
+    修改内容   : <1> forward_mot_model()输入图像的格式由RGB888修改为BGR888.
+                 <2> forward_mot_model()返回的跟踪结果种的边框参数类型由double修改为int.
 
 ******************************************************************************/
 
@@ -79,18 +84,18 @@ JNIEXPORT jint JNICALL Java_mot4j_unload_1mot_1model
 // 执行多目标跟踪
 //*********************************************************************
 JNIEXPORT jstring JNICALL Java_mot4j_forward_1mot_1model
-  (JNIEnv *env, jobject obj, jbyteArray rgb, jint width, jint height, jint stride)
+  (JNIEnv *env, jobject obj, jbyteArray data, jint width, jint height, jint stride)
 {
     Json::Value result;
-    jbyte *jrgb = env->GetByteArrayElements(rgb, NULL);
-    if (NULL == jrgb)
+    jbyte *jbgr = env->GetByteArrayElements(data, NULL);
+    if (NULL == jbgr)
     {
-        std::cout << "invalid rgb data pointer" << std::endl;
+        std::cout << "invalid image data pointer" << std::endl;
         return charTojstring(env, "");
     }
    
-    mot::forward_mot_model((unsigned char *)jrgb, (int)width, (int)height, (int)stride, motres);    
-    env->ReleaseByteArrayElements(rgb, jrgb, 0);
+    mot::forward_mot_model((unsigned char *)jbgr, (int)width, (int)height, (int)stride, motres);    
+    env->ReleaseByteArrayElements(data, jbgr, 0);
     
     int i = 0;
     std::vector<mot::MOT_Track>::iterator riter;
@@ -105,10 +110,10 @@ JNIEXPORT jstring JNICALL Java_mot4j_forward_1mot_1model
         std::deque<mot::MOT_Rect>::iterator iter;
         for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++, ++j)
         {
-            result[i]["rects"][j]["top"] = std::to_string(iter->top);
-            result[i]["rects"][j]["left"] = std::to_string(iter->left);
-            result[i]["rects"][j]["bottom"] = std::to_string(iter->bottom);
-            result[i]["rects"][j]["right"] = std::to_string(iter->right);
+            result[i]["rects"][j]["x"] = std::to_string(static_cast<int>(iter->left));
+            result[i]["rects"][j]["y"] = std::to_string(static_cast<int>(iter->top));
+            result[i]["rects"][j]["width"] = std::to_string(static_cast<int>(iter->right - iter->left));
+            result[i]["rects"][j]["height"] = std::to_string(static_cast<int>(iter->bottom - iter->top));
         }
     }
     

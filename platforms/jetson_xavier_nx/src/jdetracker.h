@@ -23,12 +23,12 @@ class JDETracker
 {
 public:
     static JDETracker *instance(void);
+    JDETracker(void);
+    virtual ~JDETracker(void) {}
     virtual bool init(void);
     virtual bool update(const cv::Mat &dets, std::vector<Track> &tracks);
     virtual void free(void);
 private:
-    JDETracker(void);
-    virtual ~JDETracker(void) {}
     cv::Mat motion_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
     void linear_assignment(const cv::Mat &cost, float cost_limit, Match &matches,
         std::vector<int> &mismatch_row, std::vector<int> &mismatch_col);
@@ -36,6 +36,7 @@ private:
 private:
     static JDETracker *me;
     int timestamp;
+    TrajectoryPool candidates;
     TrajectoryPool tracked_trajectories;
     TrajectoryPool lost_trajectories;
     TrajectoryPool removed_trajectories;

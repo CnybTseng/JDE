@@ -1,12 +1,16 @@
 #include <map>
+#include <omp.h>
+#include <chrono>
 #include <stdio.h>
 #include <limits.h>
 #include <algorithm>
 
+#include "utils.h"
 #include "lapjv.h"
 #include "jdeutils.h"
 #include "jdetracker.h"
 
+#define MAXIMUM_CANDIDATES 1000
 #define mat2vec4f(m) cv::Vec4f(*m.ptr<float>(0,0), *m.ptr<float>(0,1), *m.ptr<float>(0,2), *m.ptr<float>(0,3))
 
 namespace mot {
@@ -40,13 +44,24 @@ bool JDETracker::init(void)
 {
     bool ret = LAPJV::instance()->init();
     check_error_ret(!ret, false, "solver init fail!\n");
+    candidates.reserve(MAXIMUM_CANDIDATES);
     return true;
 }
 
 bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
 {
+#if PROFILE_TRACKER
+    auto create_candi = std::chrono::high_resolution_clock::now();
+#endif
     ++timestamp;
-    TrajectoryPool candidates(dets.rows);
+    candidates.resize(dets.rows);
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("create_candi", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - create_candi).count());
+    auto set_candi = std::chrono::high_resolution_clock::now();
+#endif
+    // About 1.9x speed up using OpenMP and other optimization methods.
+#pragma omp parallel for num_threads(2)
     for (int i = 0; i < dets.rows; ++i)
     {
         float score = *dets.ptr<float>(i, 1);
@@ -55,7 +70,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         const cv::Mat &embedding = dets(cv::Rect(6, i, dets.cols - 6, 1));
         candidates[i] = mot::Trajectory(ltrb, score, embedding);
     }
-
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("set_candi", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - set_candi).count());
+    auto init_trajpool = std::chrono::high_resolution_clock::now();
+#endif
     TrajectoryPtrPool tracked_trajectories;
     TrajectoryPtrPool unconfirmed_trajectories;
     for (size_t i = 0; i < this->tracked_trajectories.size(); ++i)
@@ -67,16 +86,33 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     }
 
     TrajectoryPtrPool trajectory_pool = tracked_trajectories + this->lost_trajectories;
-
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("init_trajpool", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - init_trajpool).count());
+    auto start_predict = std::chrono::high_resolution_clock::now();
+#endif
+#pragma omp parallel for num_threads(2)
     for (size_t i = 0; i < trajectory_pool.size(); ++i)
         trajectory_pool[i]->predict();
-   
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("predict", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_predict).count());
+    auto start_motion = std::chrono::high_resolution_clock::now();
+#endif   
     Match matches;
     std::vector<int> mismatch_row;
     std::vector<int> mismatch_col;
     cv::Mat cost = motion_distance(trajectory_pool, candidates);
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("motion_distance", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_motion).count());
+    auto start_lap = std::chrono::high_resolution_clock::now();
+#endif 
     linear_assignment(cost, 0.7f, matches, mismatch_row, mismatch_col);
-    
+ #if PROFILE_TRACKER
+    profiler.reportLayerTime("linear_assignment", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_lap).count());
+#endif   
     MatchIterator miter;
     TrajectoryPtrPool activated_trajectories;
     TrajectoryPtrPool retrieved_trajectories;    
@@ -95,7 +131,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
             retrieved_trajectories.push_back(pt);
         }
     }
-    
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("motion", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_motion).count());
+    auto start_iou = std::chrono::high_resolution_clock::now();
+#endif    
     TrajectoryPtrPool next_candidates(mismatch_col.size());
     for (size_t i = 0; i < mismatch_col.size(); ++i)
         next_candidates[i] = &candidates[mismatch_col[i]];
@@ -107,8 +147,14 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         if (trajectory_pool[j]->state == Tracked)
             next_trajectory_pool.push_back(trajectory_pool[j]);
     }
-    
+#if PROFILE_TRACKER
+    auto start_iou_dist = std::chrono::high_resolution_clock::now();
+#endif
     cost = iou_distance(next_trajectory_pool, next_candidates);
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("iou_distance", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_iou_dist).count());
+#endif 
     linear_assignment(cost, 0.5f, matches, mismatch_row, mismatch_col);
     
     for (miter = matches.begin(); miter != matches.end(); miter++)
@@ -126,7 +172,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
             retrieved_trajectories.push_back(pt);
         }
     }
-    
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("iou", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_iou).count());
+    auto start_lost_iou = std::chrono::high_resolution_clock::now();
+#endif    
     TrajectoryPtrPool lost_trajectories;
     for (size_t i = 0; i < mismatch_row.size(); ++i)
     {
@@ -150,7 +200,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         unconfirmed_trajectories[miter->first]->update(*nnext_candidates[miter->second], timestamp);
         activated_trajectories.push_back(unconfirmed_trajectories[miter->first]);
     }
-    
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("lost iou", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_lost_iou).count());
+    auto start_left_work = std::chrono::high_resolution_clock::now();
+#endif     
     TrajectoryPtrPool removed_trajectories;
     for (size_t i = 0; i < mismatch_row.size(); ++i)
     {
@@ -202,7 +256,10 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
             tracks.push_back(track);
         }
     }
-    
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("left work", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_left_work).count());
+#endif     
     return 0;
 }
 
@@ -215,11 +272,27 @@ cv::Mat JDETracker::motion_distance(const TrajectoryPtrPool &a, const Trajectory
 {
     if (0 == a.size() || 0 == b.size())
         return cv::Mat(a.size(), b.size(), CV_32F);
-    
+#if PROFILE_TRACKER
+    auto start_embd = std::chrono::high_resolution_clock::now();
+#endif   
     cv::Mat edists = embedding_distance(a, b);
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("embedding_distance", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_embd).count());
+    auto start_maha = std::chrono::high_resolution_clock::now();
+#endif
     cv::Mat mdists = mahalanobis_distance(a, b);
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("mahalanobis_distance", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_maha).count());
+    auto start_linear = std::chrono::high_resolution_clock::now();
+#endif
     cv::Mat fdists = lambda * edists + (1 - lambda) * mdists;
-    
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("linear combine", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_linear).count());
+    auto start_gate = std::chrono::high_resolution_clock::now();
+#endif    
     const float gate_thresh = chi2inv95[4];
     for (int i = 0; i < fdists.rows; ++i)
     {
@@ -229,7 +302,10 @@ cv::Mat JDETracker::motion_distance(const TrajectoryPtrPool &a, const Trajectory
                 *fdists.ptr<float>(i, j) = FLT_MAX;
         }
     }
-    
+#if PROFILE_TRACKER
+    profiler.reportLayerTime("gate", std::chrono::duration<float, std::milli>(
+        std::chrono::high_resolution_clock::now() - start_gate).count());
+#endif    
     return fdists;
 }
 

@@ -19,7 +19,7 @@ import utils
 import yolov3
 import darknet
 import dataset as ds
-import shufflenetv2
+import shufflenetv2v2 as shufflenetv2
 
 def parse_args():
     parser = argparse.ArgumentParser()

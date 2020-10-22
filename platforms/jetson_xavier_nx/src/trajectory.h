@@ -34,7 +34,7 @@ private:
     float std_weight_velocity;
 };
 
-inline TKalmanFilter::TKalmanFilter(void) : cv::KalmanFilter(8, 4)
+inline TKalmanFilter::TKalmanFilter(void) : cv::KalmanFilter(8, 4, 0, CV_32F)
 {
     cv::KalmanFilter::transitionMatrix = cv::Mat::eye(8, 8, CV_32F);
     for (int i = 0; i < 4; ++i)
@@ -123,9 +123,23 @@ inline Trajectory::Trajectory(const Trajectory &other):
     state(other.state), ltrb(other.ltrb), id(other.id), is_activated(other.is_activated),
     timestamp(other.timestamp), starttime(other.starttime), xyah(other.xyah),
     score(other.score), eta(other.eta), length(other.length)
-{    
-    other.smooth_embedding.copyTo(smooth_embedding);
-    other.current_embedding.copyTo(current_embedding);
+{
+    if (!other.smooth_embedding.empty())
+    {
+        other.smooth_embedding.copyTo(smooth_embedding);
+    }
+    else
+    {
+        smooth_embedding.release();
+    }
+    if (!other.current_embedding.empty())
+    {
+        other.current_embedding.copyTo(current_embedding);
+    }
+    else
+    {
+        current_embedding.release();
+    }
 }
 
 inline Trajectory &Trajectory::operator=(const Trajectory &rhs)

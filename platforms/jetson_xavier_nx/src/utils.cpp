@@ -2,6 +2,8 @@
 
 namespace mot {
 
+SimpleProfiler profiler("mot");
+
 // 重载cout打印nvinfer1::Dims型变量
 std::ostream& operator<<(std::ostream& os, nvinfer1::Dims dims)
 {

@@ -10,7 +10,7 @@
 namespace mot {
 
 struct Detection {
-    int32_t category;
+    float category;
     float score;
     struct {
         float top;
@@ -19,12 +19,17 @@ struct Detection {
         float right;
     } bbox;
     float embedding[EMBD_DIM];
-};
+}__attribute__((packed));
+
+void QsortDescentInplace(std::vector<Detection>& data);
+void NonmaximumSuppression(const std::vector<Detection>& dets, std::vector<size_t>& keeps, float iou_thresh);
 
 class JDecoder
 {
 public:
     static JDecoder* instance(void);
+    JDecoder();
+    ~JDecoder() {};
     bool init(void);
     bool infer(std::vector<std::shared_ptr<float>>& in, std::vector<Detection>& dets);
     bool destroy(void);
@@ -44,8 +49,6 @@ private:
     const int32_t inwidth;
     const int32_t inheight;
     const int32_t strides[NUM_OUTPUTS];
-    JDecoder();
-    ~JDecoder() {};
 };
 
 }   // namespace mot

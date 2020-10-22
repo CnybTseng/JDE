@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo step 1: make mot4j.class and mot4j.h ...
-javac -h . -d pkg mot4j.java
+javac -h . mot4j.java
 
 echo step 2: make libmot4j.so ...
 g++ mot4j.cpp -fPIC -shared -o libmot4j.so \

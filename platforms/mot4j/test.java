@@ -61,7 +61,6 @@ public class test
         File fs[] = file.listFiles();
         Arrays.sort(fs);
 
-        double eps = 0.00000001;
         for (File f : fs)
         {
             if (f.isDirectory())
@@ -88,11 +87,12 @@ public class test
             }
             
             max_frames--;
-            int stride = im.getWidth() * 3;     // 只支持RGB888格式图像
-            byte rgb[] = ((DataBufferByte)im.getRaster().getDataBuffer()).getData();
+            int stride = im.getWidth() * 3;
+            // 应将data由RGB888转BGR888, 此处仅用于展示算法API调用方法, 就不转了
+            byte data[] = ((DataBufferByte)im.getRaster().getDataBuffer()).getData();
             
             // 2. 执行模型推理
-            String result = handle.forward_mot_model(rgb, im.getWidth(), im.getHeight(), stride);
+            String result = handle.forward_mot_model(data, im.getWidth(), im.getHeight(), stride);
             
             // 拿着跟踪结果去绘图, 或抠图, 或啥的......
             System.out.println(result);                
@@ -105,19 +105,19 @@ public class test
                     int identifier = jobj.getInt("identifier");     // 目标轨迹ID
                     String category = jobj.getString("category");   // 目标类别
                     JSONArray rects = jobj.getJSONArray("rects");   // 目标边框集合
-                    System.out.printf("%d, %s:\n", identifier, category);
+                    // System.out.printf("%d, %s:\n", identifier, category);
                     for (int k = 0; k < rects.length(); k++)
                     {
                         JSONObject kobj = rects.getJSONObject(k);
-                        double top = kobj.getDouble("top");
-                        double left = kobj.getDouble("left");
-                        double bottom = kobj.getDouble("bottom");
-                        double right = kobj.getDouble("right");
-                        if (top < eps && left < eps && bottom < eps && right < eps)
+                        int x = kobj.getInt("x");
+                        int y = kobj.getInt("y");
+                        int w = kobj.getInt("width");
+                        int h = kobj.getInt("height");
+                        if (x == 0 && y == 0 && w == 0 && h == 0)
                         {
                             continue;
                         }
-                        System.out.printf("\t%f %f %f %f\n", top, left, bottom, right);
+                        // System.out.printf("\t%d %d %d %d\n", x, y, w, h);
                     }
                 }
             }

@@ -1,5 +1,7 @@
+#include <omp.h>
 #include <algorithm>
 
+#include "utils.h"
 #include "trajectory.h"
 
 namespace mot {
@@ -124,10 +126,11 @@ void Trajectory::reactivate(Trajectory &traj, int timestamp_, bool newid)
 
 void Trajectory::update_embedding(const cv::Mat &embedding)
 {
-    current_embedding = embedding / cv::norm(embedding);
+    current_embedding = embedding; // / cv::norm(embedding);
     if (smooth_embedding.empty())
     {
         smooth_embedding = current_embedding;
+        return;
     }
     else
     {
@@ -333,6 +336,7 @@ cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &
 cv::Mat embedding_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
 {
     cv::Mat dists(a.size(), b.size(), CV_32F);
+#pragma omp parallel for num_threads(2)
     for (size_t i = 0; i < a.size(); ++i)
     {
         float *distsi = dists.ptr<float>(i);
@@ -402,6 +406,7 @@ cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b
 {
     std::vector<cv::Mat> means(a.size());
     std::vector<cv::Mat> icovariances(a.size());
+#pragma omp parallel for num_threads(2)
     for (size_t i = 0; i < a.size(); ++i)
     {
         cv::Mat covariance;
@@ -410,6 +415,7 @@ cv::Mat mahalanobis_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b
     }
     
     cv::Mat dists(a.size(), b.size(), CV_32F);
+#pragma omp parallel for num_threads(2)
     for (size_t i = 0; i < a.size(); ++i)
     {
         float *distsi = dists.ptr<float>(i);
@@ -487,6 +493,7 @@ cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b)
     }
     
     cv::Mat dists(a.size(), b.size(), CV_32F);
+// #pragma omp parallel for num_threads(2)
     for (size_t i = 0; i < a.size(); ++i)
     {
         const cv::Vec4f &boxa = a[i]->ltrb;

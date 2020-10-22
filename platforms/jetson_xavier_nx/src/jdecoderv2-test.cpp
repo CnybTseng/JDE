@@ -1,12 +1,14 @@
 #include <bitset>
 #include <chrono>
 #include <string>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <algorithm>
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime_api.h>
 
+#include "nms.h"
 #include "utils.h"
 #include "jdecoderv2.h"
 
@@ -117,13 +119,32 @@ int main(int argc, char *argv[])
     std::cout << "compute_capability: " << device_prop.major << "." << device_prop.minor << std::endl;
     
     float* dets_gpu;
+    float* dets_gpu2;
     // Ensure that the data is 8 bytes alignment for float2 SIMD computation.
     // The first 4 bytes store the number of valid output boxes, and the second
     // 4 bytes are not used, just for data alignment.
-    size_t numel = nvinfer1::jdec::maxNumOutputBox * nvinfer1::jdec::decOutputDim + 2;
-    cudaMalloc((void**)&dets_gpu, numel * sizeof(float));        
+    size_t numel = numel_after_align(nvinfer1::jdec::maxNumOutputBox *
+        nvinfer1::jdec::decOutputDim + 1, sizeof(float), 8);
+    cudaMalloc((void**)&dets_gpu, numel * sizeof(float));
+    cudaMalloc((void**)&dets_gpu2, nvinfer1::jdec::maxNumOutputBox * DETECTION_DIM * sizeof(float));
     std::shared_ptr<float> dets_cpu(new float[numel]);
+    std::shared_ptr<float> dets_cpu2(new float[nvinfer1::jdec::maxNumOutputBox * DETECTION_DIM]);
     std::vector<Detection> dets(nvinfer1::jdec::maxNumOutputBox);
+    
+    // For latency test
+    srand(time(NULL));
+    const int minsize = 10;
+    for (size_t i = 0; i < dets.size(); ++i) {
+        dets[i].score = (static_cast<float>(rand()) / RAND_MAX) * 0.49f;
+        dets[i].bbox.top = (static_cast<float>(rand()) / RAND_MAX) *
+            (nvinfer1::jdec::netInHeight - minsize);
+        dets[i].bbox.left = (static_cast<float>(rand()) / RAND_MAX) *
+            (nvinfer1::jdec::netInWidth - minsize);
+        dets[i].bbox.bottom = (static_cast<float>(rand()) / RAND_MAX) *
+            (nvinfer1::jdec::netInHeight - 1 - dets[i].bbox.top) + dets[i].bbox.top;
+        dets[i].bbox.right = (static_cast<float>(rand()) / RAND_MAX) *
+            (nvinfer1::jdec::netInWidth - 1 - dets[i].bbox.left) + dets[i].bbox.left;
+    }
     
     cudaStream_t stream;
     cudaStreamCreate(&stream);
@@ -145,13 +166,17 @@ int main(int argc, char *argv[])
     }
     
     float iou_thresh = 0.4f;
-    std::vector<Detection> nms_dets;
-    nvinfer1::JDecoderV2 jdecoderv2;
+    std::vector<Detection> nms_dets(nvinfer1::jdec::maxNumOutputBox);
+    std::vector<Detection> nms_dets2(nvinfer1::jdec::maxNumOutputBox);
+    nvinfer1::JDecoderPlugin jdecoderv2;
+    mot::NMS::instance()->init(nvinfer1::jdec::maxNumOutputBox);
+    
     for (int i = 0; i < loops; ++i) {
         for (int j = 0; j < num_outs; ++j) {
             cudaMemcpy(in_gpu[j], in_cpu[j].get(), size[j], cudaMemcpyHostToDevice);
         }
         
+        // About 5x speed up.
         mot::SimpleProfiler profiler("jdecoderv2");
         auto start_test = std::chrono::high_resolution_clock::now();
         jdecoderv2.forward_test((const float* const*)in_gpu, dets_gpu, stream);
@@ -159,32 +184,83 @@ int main(int argc, char *argv[])
         cudaError_t code = cudaStreamSynchronize(stream);
         profiler.reportLayerTime("forward_test", std::chrono::duration<float, std::milli>(
             std::chrono::high_resolution_clock::now() - start_test).count());
-        
+
         auto start_qsort = std::chrono::high_resolution_clock::now();
         memcpy(dets.data(), &dets_cpu.get()[2], dets_cpu.get()[0] * nvinfer1::jdec::decOutputDim * sizeof(float));
         QsortDescentInplace(dets);
         profiler.reportLayerTime("QsortDescentInplace", std::chrono::duration<float, std::milli>(
             std::chrono::high_resolution_clock::now() - start_qsort).count());
         
+        // Comment this line when compare CPU and GPU version NMS seriously.
+        // We will have more detections (1024) for NMS. About 16x speed up.
+        // dets.resize(dets_cpu.get()[0]);
+        
+        int keeps2[dets.size()];
+        int num_dets2 = 0;
+        for (int j = 0; j < dets.size(); ++j) {
+            dets_cpu2.get()[j * DETECTION_DIM]     = dets[j].bbox.top;
+            dets_cpu2.get()[j * DETECTION_DIM + 1] = dets[j].bbox.left;
+            dets_cpu2.get()[j * DETECTION_DIM + 2] = dets[j].bbox.bottom;
+            dets_cpu2.get()[j * DETECTION_DIM + 3] = dets[j].bbox.right;
+            dets_cpu2.get()[j * DETECTION_DIM + 4] = dets[j].score;
+        }
+        cudaMemcpy(dets_gpu2, dets_cpu2.get(), dets.size() * DETECTION_DIM * sizeof(float), cudaMemcpyHostToDevice);
+
+        auto start_nms2 = std::chrono::high_resolution_clock::now();
+        mot::NMS::instance()->nms(dets_gpu2, dets.size(), keeps2, &num_dets2, iou_thresh);
+        cudaDeviceSynchronize();
+        profiler.reportLayerTime("test_nms", std::chrono::duration<float, std::milli>(
+            std::chrono::high_resolution_clock::now() - start_nms2).count());
+        
+        for (int j = 0; j < num_dets2; ++j)
+            nms_dets2[j] = dets[keeps2[j]];
+        nms_dets2.resize(num_dets2);
+        std::cout << "test_nms dets size: " << nms_dets2.size() << std::endl;
+        
         auto start_nms = std::chrono::high_resolution_clock::now();
         std::vector<size_t> keeps;
         NonmaximumSuppression(dets, keeps, iou_thresh);
-        int num_dets = static_cast<int>(keeps.size());
-        for (int i = 0; i < num_dets; ++i)
-            nms_dets.push_back(dets[keeps[i]]);
         profiler.reportLayerTime("NonmaximumSuppression", std::chrono::duration<float, std::milli>(
             std::chrono::high_resolution_clock::now() - start_nms).count());
         std::cout << profiler << std::endl;
+        
+        int num_dets = static_cast<int>(keeps.size());
+        for (int j = 0; j < num_dets; ++j)
+            nms_dets[j] = dets[keeps[j]];
+        nms_dets.resize(num_dets);
+        std::cout << "NonmaximumSuppression dets size: " << nms_dets.size() << std::endl;
         
         if (cudaSuccess != code) {
             printf("cudaStreamSynchronize fail: %s\n", cudaGetErrorString(code));
         } else {
             printf("cudaStreamSynchronize success\n");
         }
+        
+        if (0 == i) {
+            for (int j = 0; j < num_dets2; ++j) {
+                std::cout << keeps2[j] << " ";
+            }
+            std::cout << std::endl;
+            for (int j = 0; j < keeps.size(); ++j) {
+                std::cout << keeps[j] << " ";
+            }
+            std::cout << std::endl;
+            if (num_dets2 == keeps.size()) {
+                for (int j = 0; j < num_dets2; ++j) {
+                    if (keeps2[j] != keeps[j]) {
+                        std::cout << "CPU NMS is not equal to GPU NMS!" << std::endl;
+                        break;
+                    }
+                }
+            } else {
+                std::cout << "CPU NMS is not equal to GPU NMS!" << std::endl;
+            }
+        }
     }
     cudaFree(dets_gpu);
+    cudaFree(dets_gpu2);
     cudaStreamDestroy(stream);    
-    std::cout << "Test JDecoderV2: " << dets_cpu.get()[0] << std::endl;
+    std::cout << "Test JDecoderPlugin: " << dets_cpu.get()[0] << std::endl;
 
     constexpr int thickness = 1;
     cv::Mat input = cv::imread("input.jpg");
@@ -205,11 +281,23 @@ int main(int argc, char *argv[])
     
     output = input.clone();
     for (size_t i = 0; i < nms_dets.size(); ++i) {
+        // std::cout << i << ": " << nms_dets[i].category << ", " << nms_dets[i].score << ", " << nms_dets[i].bbox.top;
+        // std::cout << ", " << nms_dets[i].bbox.left << ", " << nms_dets[i].bbox.bottom << ", " << nms_dets[i].bbox.right << std::endl;
         cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
         cv::rectangle(output, cv::Point(nms_dets[i].bbox.left, nms_dets[i].bbox.top),
             cv::Point(nms_dets[i].bbox.right, nms_dets[i].bbox.bottom), color, thickness);
     }
     cv::imwrite("output_nms.jpg", output);
+    
+    output = input.clone();
+    for (size_t i = 0; i < nms_dets2.size(); ++i) {
+        // std::cout << i << ": " << nms_dets2[i].category << ", " << nms_dets2[i].score << ", " << nms_dets2[i].bbox.top;
+        // std::cout << ", " << nms_dets2[i].bbox.left << ", " << nms_dets2[i].bbox.bottom << ", " << nms_dets2[i].bbox.right << std::endl;
+        cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
+        cv::rectangle(output, cv::Point(nms_dets2[i].bbox.left, nms_dets2[i].bbox.top),
+            cv::Point(nms_dets2[i].bbox.right, nms_dets2[i].bbox.bottom), color, thickness);
+    }
+    cv::imwrite("output_nms_gpu.jpg", output);
 
     return 0;
 }

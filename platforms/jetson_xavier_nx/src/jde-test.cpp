@@ -9,6 +9,7 @@
 #include <sys/time.h>
 
 #include "jde.h"
+#include "utils.h"
 
 int main(int argc, char *argv[])
 {
@@ -29,7 +30,7 @@ int main(int argc, char *argv[])
     std::shared_ptr<float> in(new float[dims0.numel()]);
     
     // Allocate output buffer.
-    std::vector<std::shared_ptr<float>> out(3);
+    std::vector<std::shared_ptr<float>> out(NUM_BINDINGS - 1);
     for (int i = 0; i < out.size(); ++i) {
         mot::DimsX dims = mot::JDE::instance()->get_binding_dims(i + 1);
         out[i] = std::shared_ptr<float>(new float[dims.numel()]);
@@ -37,7 +38,7 @@ int main(int argc, char *argv[])
     
     srand(time(NULL));
     for (int i = 0; i < dims0.numel(); ++i) {
-        in.get()[i] = (float)rand() / RAND_MAX;
+        in.get()[i] = 1.f; // (float)rand() / RAND_MAX;
     }
     
     // Saving input for comparing with pytorch baseline
@@ -74,6 +75,8 @@ int main(int argc, char *argv[])
         std::cout << "destroy JDE fail" << std::endl;
         return 0;
     }
-    
+#if PROFILE    
+    std::cout << std::endl << mot::profiler << std::endl;
+#endif    
     return 0;
 }

@@ -8,7 +8,7 @@ import torch.onnx as onnx
 import onnxruntime as ort
 
 import darknet
-import shufflenetv2
+import shufflenetv2v2 as shufflenetv2
 
 if __name__ == '__main__':
     # parse arguments from command line
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     # load weights if PyTorch model was given
     if args.pytorch_model:
         state_dict = model.state_dict()
-        train_state_dict = torch.load(args.pytorch_model)
+        train_state_dict = torch.load(args.pytorch_model,  map_location=torch.device('cpu'))
         # remove identifier classifier from train_state_dict
         train_state_dict = {k:v for k,v in train_state_dict.items() if k in state_dict.keys()}
         train_state_dict = collections.OrderedDict(train_state_dict)

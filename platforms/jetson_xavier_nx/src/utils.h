@@ -9,6 +9,24 @@
 
 #include <NvInfer.h>
 
+#define PROFILE 1
+#if PROFILE
+#define PROFILE_JDE 0
+#define PROFILE_DECODER 0
+#define PROFILE_TRACKER 0
+#else
+#define PROFILE_JDE 0
+#define PROFILE_DECODER 0
+#define PROFILE_TRACKER 0    
+#endif
+
+#define USE_DECODERV2 1             //! Use GPU-optimized decoder
+#if USE_DECODERV2
+#define INTEGRATES_DECODER 1        //! And integrates decoder into engine
+#else
+#define INTEGRATES_DECODER 0    
+#endif
+
 #define SAFETY_FREE(mem)    \
 do {                        \
     if (mem) {              \
@@ -16,6 +34,9 @@ do {                        \
         mem = nullptr;      \
     }                       \
 } while (0)
+
+#define numel_after_align(n, elsize, align) \
+    ((((n) * (elsize) + (align) - 1) / (align)) * (align) / (elsize))
 
 namespace mot {
 
@@ -117,6 +138,8 @@ private:
     std::vector<std::string> mLayerNames;
     std::map<std::string, Record> mProfile;
 };
+
+extern SimpleProfiler profiler;
 
 // 兆字节转字节
 constexpr long long int operator""_MiB(long long unsigned int val)

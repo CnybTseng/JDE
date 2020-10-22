@@ -49,11 +49,11 @@ public class mot4j
     public native int unload_mot_model();
     /**
      * @brief 执行多目标跟踪.
-     * @param RGB888格式图像数据
-     * @param 图像宽度
-     * @param 图像高度
-     * @param 图像扫描行字节步长
+     * @param data BGR888格式图像数据
+     * @param width 图像宽度
+     * @param height 图像高度
+     * @param stride 图像扫描行字节步长
      * @return 多目标跟踪结果, 为Json转换来的字符串
      */
-    public native String forward_mot_model(byte rgb[], int width, int height, int stride);
+    public native String forward_mot_model(byte data[], int width, int height, int stride);
 }

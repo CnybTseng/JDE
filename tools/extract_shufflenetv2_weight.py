@@ -10,7 +10,7 @@ import torch
 import argparse
 import numpy as np
 sys.path.append('.')
-import shufflenetv2
+import shufflenetv2v2 as shufflenetv2
 from collections import OrderedDict
 
 import dataset
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     
     src_layer_index = 0
     for name, module in model.named_modules():
-        if 'stage5' in name:
+        if 'conv5' in name:
             if src_layer_index != len(src_param):
                 print(f'something is wrong when reading parameters from source model!')
             break

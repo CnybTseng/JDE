@@ -11,14 +11,14 @@
 namespace nvinfer1 {
 
 template <typename T>
-void write(char*& buffer, const T& data)
+static void write(char*& buffer, const T& data)
 {
     *reinterpret_cast<T*>(buffer) = data;
     buffer += sizeof(data);
 }
 
 template <typename T>
-T read(const char*& buffer)
+static T read(const char*& buffer)
 {
     T data = *reinterpret_cast<const T*>(buffer);
     buffer += sizeof(T);
@@ -55,32 +55,6 @@ Dims ChunkPlugin::getOutputDimensions(int32_t index, const Dims* inputs, int32_t
     assert(1 == nbInputDims);
     return Dims3(inputs[0].d[0] >> 1, inputs[0].d[1], inputs[0].d[2]);
 }
-
-// bool ChunkPlugin::supportsFormat(DataType type, PluginFormat format) const
-// {
-//     int device;
-//     auto ret = cudaGetDevice(&device);
-//     if (0 != ret) {
-//         std::cout << "cudaGetDevice fail" << std::endl;
-//         abort();
-//     }
-//     
-//     cudaDeviceProp props;
-//     cudaGetDeviceProperties(&props, device);
-//     int sm_version = props.major << 8 | props.minor;
-//     
-//     return (DataType::kFLOAT == type || (DataType::kHALF == type && sm_version >= 0x600))
-//         && PluginFormat::kNCHW == format;
-// }
-
-// void ChunkPlugin::configureWithFormat(const Dims* inputDims, int32_t nbInputs, const Dims* outputDims, int32_t nbOutputs,
-//     DataType type, PluginFormat format, int32_t maxBatchSize)
-// {
-//     mChunkSize = (inputDims[0].d[0] >> 1) * inputDims[0].d[1] * inputDims[0].d[2] * sizeof(float);
-//     if (DataType::kHALF == type) {
-//         mChunkSize = (mChunkSize >> 1);
-//     }
-// }
 
 int32_t ChunkPlugin::initialize()
 {
@@ -127,12 +101,6 @@ void ChunkPlugin::destroy()
 {
     delete this;
 }
-
-// IPluginV2* ChunkPlugin::clone() const
-// {
-//     auto* plugin = new ChunkPlugin(*this);
-//     return plugin;
-// }
 
 void ChunkPlugin::setPluginNamespace(const char* pluginNamespace)
 {
