@@ -22,7 +22,7 @@
 
 #define USE_DECODERV2 1             //! Use GPU-optimized decoder
 #if USE_DECODERV2
-#define INTEGRATES_DECODER 1        //! And integrates decoder into engine
+#define INTEGRATES_DECODER 0        //! And integrates decoder into engine
 #else
 #define INTEGRATES_DECODER 0    
 #endif

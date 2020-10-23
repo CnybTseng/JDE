@@ -233,8 +233,8 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
 #if USE_DECODERV2
 #if INTEGRATES_DECODER
     size_t num_det = static_cast<size_t>(model.out[0].get()[0]);
-    model.rawdet.resize(num_det);
-    memcpy((char*)(model.rawdet.data()), (char*)(&model.out[0].get()[2]),
+    std::vector<Detection> rawdet(num_det);
+    memcpy((char*)(rawdet.data()), (char*)(&model.out[0].get()[2]),
         num_det * nvinfer1::jdec::decOutputDim * sizeof(float));
 #else   // INTEGRATES_DECODER
     const void *ins[] = {model.jde.get()->get_binding(1), model.jde.get()->get_binding(2),
@@ -244,24 +244,24 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
         nvinfer1::jdec::decOutputDim + 1, sizeof(float), 8);
     cudaMemcpy(model.dets_cpu.get(), model.dets_gpu, numel * sizeof(float), cudaMemcpyDeviceToHost);
     size_t num_det = static_cast<size_t>(model.dets_cpu.get()[0]);
-    model.rawdet.resize(num_det);
-    memcpy((char*)(model.rawdet.data()), (char*)(&model.dets_cpu.get()[2]),
+    std::vector<Detection> rawdet(num_det);
+    memcpy((char*)(rawdet.data()), (char*)(&model.dets_cpu.get()[2]),
         num_det * nvinfer1::jdec::decOutputDim * sizeof(float));
 #endif  // INTEGRATES_DECODER
-    QsortDescentInplace(model.rawdet);
+    QsortDescentInplace(rawdet);
     std::vector<size_t> keeps;
     const float iou_thresh = 0.4f;
-    NonmaximumSuppression(model.rawdet, keeps, iou_thresh);
-    model.nmsdet.resize(keeps.size());
+    NonmaximumSuppression(rawdet, keeps, iou_thresh);
+    std::vector<Detection> nmsdet(keeps.size());
     for (size_t i = 0; i < keeps.size(); ++i) {
-        model.nmsdet[i] = model.rawdet[keeps[i]];
+        nmsdet[i] = rawdet[keeps[i]];
     }
-    // std::cout << tid << "=> " << model.rawdet.size() << "," << model.nmsdet.size() << std::endl;
+    // std::cout << tid << "=> " << rawdet.size() << "," << nmsdet.size() << std::endl;
 
     size_t i = 0;
     std::vector<Detection>::iterator iter;
-    cv::Mat dets(model.nmsdet.size(), 6 + EMBD_DIM, CV_32FC1);
-    for (iter = model.nmsdet.begin(); iter != model.nmsdet.end(); ++iter, ++i) {
+    cv::Mat dets(nmsdet.size(), 6 + EMBD_DIM, CV_32FC1);
+    for (iter = nmsdet.begin(); iter != nmsdet.end(); ++iter, ++i) {
         *dets.ptr<float>(i, 0) = iter->category;
         *dets.ptr<float>(i, 1) = iter->score;
         *dets.ptr<float>(i, 2) = iter->bbox.left;

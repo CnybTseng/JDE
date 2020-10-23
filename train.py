@@ -102,13 +102,15 @@ def train(args):
     
     torch.backends.cudnn.benchmark = True
     
-    dataset = ds.CustomDataset(args.dataset, 'train', args.backbone)
+    # dataset = ds.CustomDataset(args.dataset, 'train', args.backbone)
+    dataset = ds.HotchpotchDataset('/data/tseng/dataset/jde', './data/train.txt', args.backbone)
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
         True, num_workers=args.workers, collate_fn=collate_fn,
         pin_memory=args.pin, drop_last=True)
 
-    num_ids = dataset.max_id + 2
+    # num_ids = dataset.max_id + 2
+    num_ids = int(dataset.max_id + 1)
     if args.backbone == 'darknet':
         model = darknet.DarkNet(anchors, num_classes=args.num_classes,
             num_ids=num_ids).to(device)

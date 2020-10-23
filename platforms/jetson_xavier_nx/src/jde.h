@@ -5,7 +5,7 @@
 #include <memory>
 #include <NvInfer.h>
 
-#define NUM_BINDINGS 2
+#define NUM_BINDINGS 4
 
 namespace mot {
 

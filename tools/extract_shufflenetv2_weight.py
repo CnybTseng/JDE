@@ -24,8 +24,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(args)
     
-    dataset = dataset.CustomDataset(args.dataset, 'train')
-    num_ids = dataset.max_id + 2
+    # dataset = dataset.CustomDataset(args.dataset, 'train')
+    # num_ids = dataset.max_id + 2
+    dataset = dataset.HotchpotchDataset('/data/tseng/dataset/jde', './data/train.txt')
+    num_ids = int(dataset.max_id + 1)
     print(num_ids)
     
     if '0.5x' in args.src_model:
