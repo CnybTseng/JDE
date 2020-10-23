@@ -132,3 +132,5 @@ baseline
 result
 platforms/mot4j/doc
 platforms/mot4j/ims
+platform/common/README.md
+platform/jetson_xavier_nx/README.md
