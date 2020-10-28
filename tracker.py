@@ -11,6 +11,7 @@ from torchvision.ops import nms
 from cython_bbox import bbox_overlaps
 from scipy.spatial.distance import cdist
 
+import jde
 import kalman
 import yolov3
 import darknet
@@ -572,7 +573,8 @@ def main(args):
                    (128,384), (180,540), (256,640), (512,640))
 
     h, w = [int(s) for s in args.insize.split('x')]
-    decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors, embd_dim=args.embedding)
+    # decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors, embd_dim=args.embedding)
+    decoder = jde.JDEcoder((h, w), embd_dim=args.embedding)
     tracker = JDETracker()
     dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
     

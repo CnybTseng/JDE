@@ -9,6 +9,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 
+import jde
 import yolov3
 
 class ShuffleNetV2Block(torch.nn.Module):
@@ -193,7 +194,8 @@ class ShuffleNetV2(torch.nn.Module):
         '''Shared identifiers classifier'''
         
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
-        self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids, embd_dim=self.embedding_channels) if num_ids > 0 else torch.nn.Sequential()
+        # self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids, embd_dim=self.embedding_channels) if num_ids > 0 else torch.nn.Sequential()
+        self.criterion = jde.JDELoss(num_ids, embd_dim=self.embedding_channels)  if num_ids > 0 else torch.nn.Sequential()
         
         self.__init_weights()
         

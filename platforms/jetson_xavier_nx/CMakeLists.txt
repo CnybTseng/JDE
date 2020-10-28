@@ -10,6 +10,7 @@ include_directories(
     /usr/local/cuda/include
     /usr/local/cuda-10.2/samples/common/inc
     /usr/include/aarch64-linux-gnu
+    /usr/include/opencv4
     /usr/local/include/opencv4
     ./src
 )
@@ -20,7 +21,7 @@ link_directories(
     /usr/lib/aarch64-linux-gnu
     /usr/local/lib64
     /usr/local/lib
-    /home/sihan/Documents/jetson_xavier_nx/build
+    ${CMAKE_CURRENT_LIST_DIR}/build
 )
 
 add_definitions(-std=c++11 -O3)

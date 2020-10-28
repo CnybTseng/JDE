@@ -250,7 +250,7 @@ class HotchpotchDataset(object):
         self._max_id = last_id
 
     def __getitem__(self, index):
-        # Transpose global index to local index in dataset.
+        # Transform global index to local index in dataset.
         lid = index
         ds_name = ''
         for i, acc_im in enumerate(self.acc_ims):
@@ -267,7 +267,7 @@ class HotchpotchDataset(object):
         image = None
         targets = None
         
-        # TODO: Transpose local identifier in dataset to global identifier.
+        # TODO: Transform local identifier in dataset to global identifier.
         
         ###################################################################
         # Temporary solution
