@@ -40,6 +40,12 @@ if __name__ == '__main__':
             cv2.imwrite(outfile, image)
             num_decode += 1
     
+    if not os.path.exists('./img1'):
+        os.mkdir('./img1')
+    
+    if not os.path.exists('./labels_with_ids'):
+        os.mkdir('./labels_with_ids')
+    
     cnt = 0
     labels = open(args.label, 'r').read().split()
     
@@ -68,14 +74,14 @@ if __name__ == '__main__':
         
         strs = label.split(',')
         frame, id, *ltwh, conf, cate, visi = strs
-        print('deal {}'.format(frame))
-
-        frame = int(frame)
-        id = int(id)
+        
         l, t, w, h = [float(i) for i in ltwh]
         if w < args.minw or h < args.minh:
             continue
         
+        print('\rdeal {}/{} {}'.format(frame, frames, id), end='', flush=True)
+        frame = int(frame)
+        id = int(id)
         x, y = (l + w / 2.0) / width, (t + h / 2.0) / height
         w, h = w / width, h / height
         

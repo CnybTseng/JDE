@@ -161,7 +161,7 @@ def train(args):
     for epoch in range(start_epoch, args.epochs):
         model.train()
         logger.info(('%8s%10s%10s' + '%10s' * 8) % (
-            'Epoch', 'Batch', 'SIZE', 'LBOX', 'LCLS', 'LIDE', 'LOSS', 'SB', 'SC', 'SI', 'LR'))
+            'Epoch', 'Batch', 'SIZE', 'LBOX', 'LCLS', 'LIDE', 'LOSS', 'SBOX', 'SCLS', 'SIDE', 'LR'))
 
         rmetrics = defaultdict(float)
         optimizer.zero_grad()

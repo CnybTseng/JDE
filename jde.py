@@ -235,20 +235,16 @@ class JDELoss(nn.Module):
             loss.append((lbox + lcls + lide + self.s_box[i] + self.s_cls[i] + self.s_ide[i]) * 0.5)
         loss = sum(loss)
         
-        # Edit log information.
+        # Make up log information.
         metrics = {
-            'LBOX': 0,
-            'LCLS': 0,
-            'LIDE': 0,
-            'LOSS':loss.detach().cpu().item(),
-            'SB'  : self.s_box[0].detach().cpu().item(),
-            'SC'  : self.s_cls[0].detach().cpu().item(),
-            'SI'  : self.s_ide[0].detach().cpu().item()}
-        for i in range(len(loss_box)):
-            metrics['LBOX'] += loss_box[i].detach().cpu().item()
-            metrics['LCLS'] += loss_cls[i].detach().cpu().item()
-            metrics['LIDE'] += loss_ide[i].detach().cpu().item()
-        
+            'LBOX': sum([l.detach().cpu().item() for l in loss_box]),
+            'LCLS': sum([l.detach().cpu().item() for l in loss_cls]),
+            'LIDE': sum([l.detach().cpu().item() for l in loss_ide]),
+            'LOSS': loss.detach().cpu().item(),
+            'SBOX': self.s_box[0].detach().cpu().item(),
+            'SCLS': self.s_cls[0].detach().cpu().item(),
+            'SIDE': self.s_ide[0].detach().cpu().item()}
+
         return loss, metrics
     
     def _build_ground_truth(self, input, target, im_size, anchor):

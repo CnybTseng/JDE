@@ -247,7 +247,7 @@ class HotchpotchDataset(object):
             self.id_shifts[ds_name] = last_id
             last_id += num_id
         
-        self._max_id = last_id
+        self._max_id = last_id - 1
 
     def __getitem__(self, index):
         # Transform global index to local index in dataset.

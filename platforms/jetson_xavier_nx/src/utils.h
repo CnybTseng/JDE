@@ -9,7 +9,7 @@
 
 #include <NvInfer.h>
 
-#define PROFILE 1
+#define PROFILE 0
 #if PROFILE
 #define PROFILE_JDE 0
 #define PROFILE_DECODER 0

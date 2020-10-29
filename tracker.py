@@ -146,6 +146,8 @@ def overlap(dets, im):
         cv2.rectangle(im, (l, t), (r, b), color, 2)
     return im
 
+last_footprint = collections.defaultdict()
+
 def overlap_trajectory(trajectories, im):
     '''叠加跟踪轨迹到图像上
     
@@ -159,12 +161,21 @@ def overlap_trajectory(trajectories, im):
         np.random.seed(trajectory.id)
         color = np.random.randint(0, 256, size=(3,)).tolist()
         l, t, r, b = trajectory.ltrb.round().astype(np.int32).tolist()
-        cv2.rectangle(im, (l, t), (r, b), color, 2)
+        im = cv2.rectangle(im, (l, t), (r, b), color, 2)
         text = '{}'.format(trajectory.id)
         text_size, baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, 1)
         x = min(max(l, 0), im.shape[1] - text_size[0] - 1)
         y = min(max(b - baseline, text_size[1]), im.shape[0] - baseline - 1)
-        cv2.putText(im, text, (x, y), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,255), thickness=1)
+        im = cv2.putText(im, text, (x, y), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,255,255), thickness=1)
+        footprint = ((l + r) // 2, b)
+        if trajectory.id in last_footprint.keys():
+            cfp = footprint
+            for lfp in reversed(last_footprint[trajectory.id]):
+                im = cv2.line(im, cfp, lfp, color, thickness=2)
+                cfp = lfp
+        else:
+            last_footprint[trajectory.id] = collections.deque([], maxlen=300)
+        last_footprint[trajectory.id].append(footprint)
     return im
 
 class TrajectoryState(IntEnum):

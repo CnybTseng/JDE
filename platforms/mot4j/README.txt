@@ -10,6 +10,7 @@ $ cd /path/to/mot4j
 $ source ./build.sh
 
 2. 测试
+$ cd release
 $ java test mot.yaml ims
 
 终端出现如下打印信息:

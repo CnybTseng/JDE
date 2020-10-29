@@ -1,0 +1,12 @@
+MOT:
+    netw: 576
+    neth: 320
+    traj_cache_len: 30
+    param_path: /home/sihan/Documents/mot/mot-nb.param
+    bin_path: /home/sihan/Documents/mot/mot-nb.bin
+    categories:
+        - person
+    mean_vals: [0, 0, 0]
+    norm_vals: [0.0039215686, 0.0039215686, 0.0039215686]
+    track_categories:
+        - person

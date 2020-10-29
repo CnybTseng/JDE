@@ -134,3 +134,5 @@ platforms/mot4j/doc
 platforms/mot4j/ims
 platforms/common/README.md
 platforms/jetson_xavier_nx/README.md
+platform/mot4j/release/jde.trt
+platform/mot4j/release/jde.wts

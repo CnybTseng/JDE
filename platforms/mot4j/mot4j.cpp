@@ -29,9 +29,9 @@
 #include <json/json.h>
 
 #include "mot.h"
-#include "mot4j.h"
+#include "com_sihan_system_jni_utils_mot4j.h"
 
-static mot::MOT_Result motres;
+mot::MOT_Result motres;
 
 // This function is coming from kinson
 jstring charTojstring( JNIEnv* env,const char* str )
@@ -64,7 +64,7 @@ jstring charTojstring( JNIEnv* env,const char* str )
 //*********************************************************************
 // 加载多目标跟踪模型
 //*********************************************************************
-JNIEXPORT jint JNICALL Java_mot4j_load_1mot_1model
+JNIEXPORT jint JNICALL Java_com_sihan_system_jni_utils_mot4j_load_1mot_1model
   (JNIEnv *env, jobject obj, jstring cfg_path)
 {
     std::string path = env->GetStringUTFChars(cfg_path, 0);
@@ -74,7 +74,7 @@ JNIEXPORT jint JNICALL Java_mot4j_load_1mot_1model
 //*********************************************************************
 // 卸载多目标跟踪模型
 //*********************************************************************
-JNIEXPORT jint JNICALL Java_mot4j_unload_1mot_1model
+JNIEXPORT jint JNICALL Java_com_sihan_system_jni_utils_mot4j_unload_1mot_1model
   (JNIEnv *env, jobject obj)
 {
     return mot::unload_mot_model();
@@ -83,7 +83,7 @@ JNIEXPORT jint JNICALL Java_mot4j_unload_1mot_1model
 //*********************************************************************
 // 执行多目标跟踪
 //*********************************************************************
-JNIEXPORT jstring JNICALL Java_mot4j_forward_1mot_1model
+JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1model
   (JNIEnv *env, jobject obj, jbyteArray data, jint width, jint height, jint stride)
 {
     Json::Value result;
