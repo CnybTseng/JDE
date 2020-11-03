@@ -11,6 +11,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
+from iou import DIOULoss
+
 class JDEcoder(nn.Module):
     '''JDE output decoder.
     
@@ -30,7 +32,6 @@ class JDEcoder(nn.Module):
     '''
     def __init__(self, im_size, anchor=None, num_class=1, embd_dim=128):
         super(JDEcoder, self).__init__()
-        super().eval()
         self.im_size = im_size
         if anchor is not None:
             self.anchor = torch.from_numpy(np.array(anchor, dtype=np.float32))
@@ -134,7 +135,7 @@ class JDEcoder(nn.Module):
         box[..., 3] = torch.exp(box[..., 3]) * ah                   # h        
         return box
 
-class JDELoss(nn.Module):
+class JDELoss(JDEcoder):
     '''JDE loss module.
     
     Param
@@ -150,28 +151,22 @@ class JDELoss(nn.Module):
     num_class: The number of classes without background. Currently only support
                one class.
     embd_dim : Identify embedding vector dimension.
+    box_loss : Bounding box loss function. It can be SmoothL1Loss, or DIOULoss.
+               The default setting is SmoothL1Loss.
+    cls_loss : Class probability loss function. Currently only support CrossEntropyLoss.
+    ide_loss : Identify loss function. Currently only support CrossEntropyLoss.
     '''
-    def __init__(self, num_ide, anchor=None, num_class=1, embd_dim=128):
-        super(JDELoss, self).__init__()
+    def __init__(self, num_ide, anchor=None, num_class=1, embd_dim=128,
+        box_loss=None, cls_loss=None, ide_loss=None):
+        super(JDELoss, self).__init__((0, 0), anchor, num_class, embd_dim)
         self.num_ide = num_ide
-        if anchor is not None:
-            self.anchor = torch.from_numpy(np.array(anchor, dtype=np.float32))
-        else:
-            self.anchor = torch.FloatTensor([
-                [[85, 255], [120, 360], [170, 420], [340, 320]],
-                [[21, 64], [30, 90], [43, 128], [60, 180]],
-                [[6, 16], [8, 23], [11, 32], [16, 45]]])
-        self.num_class = num_class
-        self.embd_dim = embd_dim
-        self.box_dim = 4
-        self.class_dim = self.num_class + 1
         self.ide_thresh = 0.5
         self.obj_thresh = 0.5
         self.bkg_thresh = 0.4
         self.ide_scale = math.sqrt(2) * math.log(num_ide - 1) if num_ide > 1 else 1
-        self.lf_box = nn.SmoothL1Loss()
-        self.lf_cls = nn.CrossEntropyLoss(ignore_index=-1)
-        self.lf_ide = nn.CrossEntropyLoss(ignore_index=-1)
+        self.lf_box = box_loss if box_loss else nn.SmoothL1Loss()
+        self.lf_cls = cls_loss if cls_loss else nn.CrossEntropyLoss(ignore_index=-1)
+        self.lf_ide = ide_loss if ide_loss else nn.CrossEntropyLoss(ignore_index=-1)
         self.s_box = nn.Parameter(torch.FloatTensor([-4.85, -4.85, -4.85]))
         self.s_cls = nn.Parameter(torch.FloatTensor([-4.15, -4.15, -4.15]))
         self.s_ide = nn.Parameter(torch.FloatTensor([-2.30, -2.30, -2.30]))
@@ -187,10 +182,12 @@ class JDELoss(nn.Module):
         im_size:    Neural network input image size with format [height, width].
         classifier: Identify classifier.
         '''
+        self.im_size = im_size
         loss_box, loss_cls, loss_ide = [], [], []
         for inp, anchor in zip(input, self.anchor):
             n, c, h, w = inp.size()
-            anc = (anchor / (im_size[0] / h)).type(inp.type()) # Scale anchors to match grid size
+            stride = im_size[0] / h
+            anc = (anchor / stride).type(inp.type()) # Scale anchors to match grid size
             num_anchor = anc.size(0)
             det_dim = num_anchor * (self.box_dim + self.class_dim)
             
@@ -198,6 +195,8 @@ class JDELoss(nn.Module):
             det = inp[:, : det_dim, ...]
             det = det.view(n, num_anchor, self.box_dim + self.class_dim, h, w)          # NACHW
             box = det[:, :, : self.box_dim, ...].permute(0, 1, 3, 4, 2).contiguous()    # NAHWC
+            if isinstance(self.lf_box, DIOULoss):
+                box = self._decode_box(box, anchor, w, h) / stride
             cls = det[:, :, self.box_dim: , ...].permute(0, 2, 1, 3, 4).contiguous()    # NCAHW
             
             # Identify embedding predictions.
@@ -292,13 +291,16 @@ class JDELoss(nn.Module):
         ignore = (~obj_mask) & (~bkg_mask)
         
         # Mask box ground truth.
-        ac_box = ac_box.view(a, h, w, self.box_dim)                         # AHW4
         tg_box_left = tg_box[tg_id[obj_mask]]
-        ac_box_left = []
-        for i in range(n):
-            ac_box_left.append(ac_box[obj_mask[i]])
-        ac_box_left = torch.cat(ac_box_left, dim=0)
-        box[obj_mask] = self._encode_box(tg_box_left, ac_box_left)
+        if isinstance(self.lf_box, nn.SmoothL1Loss):
+            ac_box = ac_box.view(a, h, w, self.box_dim)                     # AHW4
+            ac_box_left = []
+            for i in range(n):
+                ac_box_left.append(ac_box[obj_mask[i]])
+            ac_box_left = torch.cat(ac_box_left, dim=0)
+            box[obj_mask] = self._encode_box(tg_box_left, ac_box_left)
+        else:
+            box[obj_mask] = tg_box_left
         
         # Mask class probability ground truth.
         cls[obj_mask] = 1

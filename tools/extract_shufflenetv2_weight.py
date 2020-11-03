@@ -9,11 +9,12 @@ import sys
 import torch
 import argparse
 import numpy as np
-sys.path.append('.')
-import shufflenetv2v2 as shufflenetv2
 from collections import OrderedDict
 
+sys.path.append('.')
+
 import dataset
+import shufflenetv2
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -5,12 +5,16 @@
 # date: 2020/5/8
 
 import os
+import sys
 import torch
 import argparse
 import collections
 import torch.onnx as onnx
 import onnxruntime as ort
 import numpy as np
+
+sys.path.append('.')
+
 import darknet
 import shufflenetv2
 

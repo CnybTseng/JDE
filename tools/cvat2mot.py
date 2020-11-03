@@ -40,8 +40,8 @@ if __name__ == '__main__':
             cv2.imwrite(outfile, image)
             num_decode += 1
     
-    if not os.path.exists('./img1'):
-        os.mkdir('./img1')
+    if not os.path.exists('./images'):
+        os.mkdir('./images')
     
     if not os.path.exists('./labels_with_ids'):
         os.mkdir('./labels_with_ids')
@@ -85,14 +85,14 @@ if __name__ == '__main__':
         x, y = (l + w / 2.0) / width, (t + h / 2.0) / height
         w, h = w / width, h / height
         
-        outfile = os.path.join('./labels_with_ids', '%06d.txt' % id_dict[frame])
+        outfile = os.path.join('./labels_with_ids', '%06d.txt' % frame)
         file = open(outfile, 'a')
         file.write('{} {} {} {} {} {}\n'.format(
             0, id, x, y, w, h))
         file.close()
         
         infile = os.path.join('./frames', '%06d.jpg' % frame)
-        outfile = os.path.join('./img1', '%06d.jpg' % id_dict[frame])
+        outfile = os.path.join('./images', '%06d.jpg' % frame)
         if not os.path.exists(outfile):
             image = cv2.imread(infile)
             cv2.imwrite(outfile, image)

@@ -1,4 +1,5 @@
 import os
+import sys
 import torch
 import struct
 import argparse
@@ -7,8 +8,10 @@ import numpy as np
 import torch.onnx as onnx
 import onnxruntime as ort
 
+sys.path.append('.')
+
 import darknet
-import shufflenetv2v2 as shufflenetv2
+import shufflenetv2
 
 if __name__ == '__main__':
     # parse arguments from command line

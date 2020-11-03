@@ -265,29 +265,28 @@ class HotchpotchDataset(object):
         
         # TODO: Load and augment image and labels.
         image = None
-        targets = None
-        
-        # TODO: Transform local identifier in dataset to global identifier.
-        
+        targets = None        
         ###################################################################
         # Temporary solution
-        from xxx import LoadImagesAndLabels
-        
+        from xxx import LoadImagesAndLabels        
         if self.backbone is 'darknet':
             loader = LoadImagesAndLabels()
         else:
             loader = LoadImagesAndLabels(transforms=None)
         image, labels, _, _ = loader.get_data(image_path, label_path)
+        ###################################################################
         
+        # Transform local identifier in dataset to global identifier.
         targets = []
         for c, i, x, y, w, h in labels:
             if i > -1:
                 targets.append([0, c, i + self.id_shifts[ds_name], x, y, w, h])
+            else:       # Only have bounding box annotations.
+                targets.append([0, c, i, x, y, w, h])
         
         targets = torch.as_tensor(targets, dtype=torch.float32, device=torch.device('cpu'))
         if targets.size(0) == 0:
             targets = torch.FloatTensor(0, 7)        
-        ###################################################################
         
         return image, targets
     

@@ -10,6 +10,8 @@ import torch
 import argparse
 import numpy as np
 
+sys.path.append('.')
+
 import darknet
 import dataset
 
