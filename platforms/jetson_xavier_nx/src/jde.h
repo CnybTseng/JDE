@@ -61,7 +61,6 @@ private:
     void *bindings[NUM_BINDINGS];
     DimsX binding_dims[NUM_BINDINGS];
     bool create_network_from_scratch(void);
-    bool create_network_from_scratch_v2(void);
     bool create_network_from_parser(void);
 };
 

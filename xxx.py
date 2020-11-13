@@ -6,6 +6,14 @@ import random
 import numpy as np
 from torchvision.transforms import transforms as T
 
+def record_error_box(box, width, height, img_path):
+    minx, maxx = box[:, [0, 2]].min(), box[:, [0, 2]].max()
+    miny, maxy = box[:, [1, 3]].min(), box[:, [1, 3]].max()
+    if minx < 0 or maxx >= width or miny < 0 or maxy >= height:
+        with open('./error_box.txt', 'a') as file:
+            file.write('{} {} {} {} {} {} {}\n'.format(img_path, minx, maxx, miny, maxy, width, height))
+            file.close()
+
 def xyxy2xywh(x):
     # Convert bounding box format from [x1, y1, x2, y2] to [x, y, w, h]
     # x, y are coordinates of center 
@@ -62,10 +70,10 @@ class LoadImagesAndLabels:  # for training
 
             # Normalized xywh to pixel xyxy format
             labels = labels0.copy()
-            labels[:, 2] = ratio * w * (labels0[:, 2] - labels0[:, 4] / 2) + padw
-            labels[:, 3] = ratio * h * (labels0[:, 3] - labels0[:, 5] / 2) + padh
-            labels[:, 4] = ratio * w * (labels0[:, 2] + labels0[:, 4] / 2) + padw
-            labels[:, 5] = ratio * h * (labels0[:, 3] + labels0[:, 5] / 2) + padh
+            labels[:, 2] = np.clip(ratio * w * (labels0[:, 2] - labels0[:, 4] / 2) + padw, 0, width - 1)
+            labels[:, 3] = np.clip(ratio * h * (labels0[:, 3] - labels0[:, 5] / 2) + padh, 0, height - 1)
+            labels[:, 4] = np.clip(ratio * w * (labels0[:, 2] + labels0[:, 4] / 2) + padw, 0, width - 1)
+            labels[:, 5] = np.clip(ratio * h * (labels0[:, 3] + labels0[:, 5] / 2) + padh, 0, height - 1)
         else:
             labels = np.array([])
 
@@ -88,6 +96,7 @@ class LoadImagesAndLabels:  # for training
 
         nL = len(labels)
         if nL > 0:
+            # record_error_box(labels[:, 2:6], width, height, img_path)
             # convert xyxy to xywh
             labels[:, 2:6] = xyxy2xywh(labels[:, 2:6].copy()) #/ height
             labels[:, 2] /= width
@@ -182,10 +191,10 @@ def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scal
             xy = np.concatenate((x - w / 2, y - h / 2, x + w / 2, y + h / 2)).reshape(4, n).T
 
             # reject warped points outside of image
-            np.clip(xy[:, 0], 0, width, out=xy[:, 0])
-            np.clip(xy[:, 2], 0, width, out=xy[:, 2])
-            np.clip(xy[:, 1], 0, height, out=xy[:, 1])
-            np.clip(xy[:, 3], 0, height, out=xy[:, 3])
+            np.clip(xy[:, 0], 0, width - 1, out=xy[:, 0])
+            np.clip(xy[:, 2], 0, width - 1, out=xy[:, 2])
+            np.clip(xy[:, 1], 0, height - 1, out=xy[:, 1])
+            np.clip(xy[:, 3], 0, height - 1, out=xy[:, 3])
             w = xy[:, 2] - xy[:, 0]
             h = xy[:, 3] - xy[:, 1]
             area = w * h

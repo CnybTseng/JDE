@@ -8,6 +8,7 @@ import sys
 import torch
 import utils
 import transforms as T
+from xxx import LoadImagesAndLabels
 
 def letterbox_image(im, insize=(320,576,3), border=128):
     '''生成letterbox图像
@@ -78,6 +79,49 @@ class ImagesLoader(object):
             lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
         return path, im, lb_im
 
+class VideoLoader(object):
+    '''Video frame iterator.
+    
+    Params
+    ------
+    path    : The file path for video.
+    insize  : The input size of neural network.
+    backbone: The backbone architecture. It can be 'darknet' or 'shufflenetv2'.
+    '''
+    def __init__(self, path, insize, backbone='shufflenetv2'):
+        if not os.path.isfile(path):
+            raise FileExistsError
+        self.vcap = cv2.VideoCapture(path)
+        self.frames = int(self.vcap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.insize = insize
+        self.backbone = backbone
+        self.count = 0
+    
+    def __iter__(self):
+        self.count = -1
+        return self
+    
+    def __next__(self):
+        self.count += 1
+        if self.count == len(self):
+            raise StopIteration
+        retval, im = self.vcap.read()
+        assert im is not None, 'VideoCapture.read() fail'
+        lb_im, s, dx, dy = letterbox_image(im, insize=self.insize)
+        if self.backbone is 'darknet':
+            lb_im = lb_im[...,::-1].transpose(2, 0, 1)
+            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
+            lb_im /= 255.0
+        else:
+            lb_im = lb_im.transpose(2, 0, 1)
+            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
+        # Keep consistency with ImagesLoader with fake path.
+        path = '%06d.jpg' % self.count
+        return path, im, lb_im
+    
+    def __len__(self):
+        return self.frames
+
 def get_transform(train, net_w=416, net_h=416):
     transforms = []
     transforms.append(T.ToTensor())
@@ -102,71 +146,10 @@ def collate_fn(batch, in_size=torch.IntTensor([416,416]), train=False):
     # return torch.cat(tensors=images, dim=0), torch.cat(tensors=targets, dim=0)
     return torch.stack(tensors=images, dim=0), torch.cat(tensors=targets, dim=0)
 
-class CustomDataset(object):
-    def __init__(self, root, file='train', backbone='shufflenetv2'):
-        self.root = root
-        path = open(os.path.join(root, f'{file}.txt')).read().split()
-        self.images_path = path[0::2]
-        self.annocations_path = path[1::2]
-        self._max_id = self._get_max_id()
-        self.backbone = backbone
-
-    def __getitem__(self, index):
-        image_path = self.images_path[index]
-        annocation_path = self.annocations_path[index]
-
-        # image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-        # assert image is not None, 'cv2.imread({image_path}) fail'
-        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        # org_size = image.shape[:2]
-        # annocation = np.loadtxt(annocation_path).reshape(-1, 6)
-        # 
-        # target = []
-        # for c, i, x, y, w, h in annocation:
-        #     target.append([0, c, i, x, y, w, h])
-        # 
-        # target = torch.as_tensor(target, dtype=torch.float32, device=torch.device('cpu'))
-        # if target.size(0) == 0:
-        #     target = torch.FloatTensor(0, 7)
-        
-        from xxx import LoadImagesAndLabels
-        
-        if self.backbone is 'darknet':
-            loader = LoadImagesAndLabels()
-        else:
-            loader = LoadImagesAndLabels(transforms=None)
-        image, labels, _, _ = loader.get_data(image_path, annocation_path)
-        
-        target = []
-        for c, i, x, y, w, h in labels:
-            target.append([0, c, i, x, y, w, h])
-        
-        target = torch.as_tensor(target, dtype=torch.float32, device=torch.device('cpu'))
-        if target.size(0) == 0:
-            target = torch.FloatTensor(0, 7)
-
-        return image, target
-    
-    def __len__(self):
-        return len(self.images_path)
-    
-    def _get_max_id(self):
-        self._max_id = -1
-        for path in self.annocations_path:
-            label = np.loadtxt(path).reshape(-1, 6)
-            max_id = np.max(label[:, 1]).astype(np.int).item()
-            if max_id > self._max_id:
-                self._max_id = max_id
-        return self._max_id
-    
-    @property
-    def max_id(self):
-        return self._max_id
-
 class HotchpotchDataset(object):
     '''Hotchpotch dataset for Caltech, Citypersons, CUHK-SYSU, ETHZ, PRW, MOT, and so on.
     '''
-    def __init__(self, root, cfg='train.txt', backbone='shufflenetv2'):
+    def __init__(self, root, cfg='train.txt', backbone='shufflenetv2', augment=True):
         '''Class initialization.
         
         Args:
@@ -248,6 +231,11 @@ class HotchpotchDataset(object):
             last_id += num_id
         
         self._max_id = last_id - 1
+        
+        if self.backbone is 'darknet':
+            self.loader = LoadImagesAndLabels(augment=augment)
+        else:
+            self.loader = LoadImagesAndLabels(augment=augment, transforms=None)
 
     def __getitem__(self, index):
         # Transform global index to local index in dataset.
@@ -267,13 +255,8 @@ class HotchpotchDataset(object):
         image = None
         targets = None        
         ###################################################################
-        # Temporary solution
-        from xxx import LoadImagesAndLabels        
-        if self.backbone is 'darknet':
-            loader = LoadImagesAndLabels()
-        else:
-            loader = LoadImagesAndLabels(transforms=None)
-        image, labels, _, _ = loader.get_data(image_path, label_path)
+        # Temporary solution        
+        image, labels, _, _ = self.loader.get_data(image_path, label_path)
         ###################################################################
         
         # Transform local identifier in dataset to global identifier.

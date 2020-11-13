@@ -16,7 +16,6 @@ from functools import partial
 from collections import defaultdict
 
 import utils
-import yolov3
 import darknet
 import dataset as ds
 import shufflenetv2
@@ -31,8 +30,8 @@ def parse_args():
         action='store_true')
     parser.add_argument('--checkpoint', type=str, default='',
         help='checkpoint model file')
-    parser.add_argument('--dataset', type=str, default='dataset',
-        help='dataset path')
+    parser.add_argument('--anchors', type=str,
+        help='path to the anchor parameters file')
     parser.add_argument('--batch-size', type=int, default=8,
         help='training batch size')
     parser.add_argument('--accumulated-batches', type=int, default=1,
@@ -52,14 +51,14 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=0.0001,
         help='initial learning rate')
     parser.add_argument('--milestones', type=int, default=[-1,-1],
-        nargs='+', help='list of batch indices, must be increasing')
+        nargs='+', help='list of batch indices, must be in increasing order')
     parser.add_argument('--lr-gamma', type=float, default=0.1,
         help='factor of decrease learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
         help='momentum')
     parser.add_argument('--weight-decay', type=float, default=0.0005,
         help='weight decay')
-    parser.add_argument('--savename', type=str, default='yolov3',
+    parser.add_argument('--savename', type=str, default='jde',
         help='filename of trained model')
     parser.add_argument('--eval-epoch', type=int, default=10,
         help='epoch beginning evaluate')
@@ -78,9 +77,15 @@ def parse_args():
     parser.add_argument('--freeze-bn', help='freeze batch norm',
         action='store_true')
     parser.add_argument('--backbone', type=str, default='darknet',
-        help='backbone arch, default is darknet, candidate is shufflenetv2')
+        help='backbone architecture, shufflenetv2 (default) or darknet')
     parser.add_argument('--thin', type=str, default='2.0x',
-        help='shufflenetv2 thin, default is 2.0x, candidates are 0.5x, 1.0x, 1.5x')
+        help='shufflenetv2 thin, it can be 0.5x (default), 1.0x, 1.5x, or 2.0x')
+    parser.add_argument('--dataset-root', type=str,
+        help='dataset root directory')
+    parser.add_argument('--lr-coeff', type=float, default=[1,1,50],
+        nargs='+', help='lr coeff [1,1,50] for backbone, detection, and identity')
+    parser.add_argument('--box-loss', type=str, default='smoothl1loss',
+        help='box regression loss, it can be smoothl1loss (default) or diouloss')
     args = parser.parse_args()
     return args
 
@@ -91,10 +96,37 @@ def init_seeds(seed=0):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def grouping_model_params(model):
+    detection_branch_keynames = [
+        'shbk6',  'conv7',
+        'shbk11', 'conv12',
+        'shbk16', 'conv17']
+
+    identity_branch_keynames = [
+        'shbk8',  'conv9',
+        'shbk13', 'conv14',
+        'shbk18', 'conv19']
+
+    detection_branch_params = []
+    identity_branch_params = []
+    backbone_neck_params = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        keyname = name.split('.')[0]
+        if keyname in detection_branch_keynames:
+            detection_branch_params.append(param)
+        elif keyname in identity_branch_keynames:
+            identity_branch_params.append(param)
+        else:
+            backbone_neck_params.append(param)
+    return backbone_neck_params, detection_branch_params, identity_branch_params
+
 def train(args):    
     utils.make_workspace_dirs(args.workspace)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    anchors = np.loadtxt(os.path.join(args.dataset, 'anchors.txt'))
+    anchors = np.loadtxt(args.anchors) if args.anchors else None
     scale_sampler = utils.TrainScaleSampler(args.in_size, args.scale_step,
         args.rescale_freq)
     shared_size = torch.IntTensor(args.in_size).share_memory_()
@@ -102,21 +134,19 @@ def train(args):
     
     torch.backends.cudnn.benchmark = True
     
-    # dataset = ds.CustomDataset(args.dataset, 'train', args.backbone)
-    dataset = ds.HotchpotchDataset('/data/tseng/dataset/jde', './data/train.txt', args.backbone)
+    dataset = ds.HotchpotchDataset(args.dataset_root, './data/train.txt', args.backbone)
     collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
         True, num_workers=args.workers, collate_fn=collate_fn,
         pin_memory=args.pin, drop_last=True)
 
-    # num_ids = dataset.max_id + 2
     num_ids = int(dataset.max_id + 1)
     if args.backbone == 'darknet':
         model = darknet.DarkNet(anchors, num_classes=args.num_classes,
             num_ids=num_ids).to(device)
     elif args.backbone == 'shufflenetv2':
         model = shufflenetv2.ShuffleNetV2(anchors, num_classes=args.num_classes,
-            num_ids=num_ids, model_size=args.thin).to(device)
+            num_ids=num_ids, model_size=args.thin, box_loss=args.box_loss).to(device)
     else:
         print('unknown backbone architecture!')
         sys.exit(0)
@@ -124,9 +154,15 @@ def train(args):
         model.load_state_dict(torch.load(args.checkpoint))    
     
     params = [p for p in model.parameters() if p.requires_grad]
+    backbone_neck_params, detection_params, identity_params = grouping_model_params(model)
     if args.optim == 'sgd':
-        optimizer = torch.optim.SGD(params, lr=args.lr,
-            momentum=args.momentum, weight_decay=args.weight_decay)
+        # optimizer = torch.optim.SGD(params, lr=args.lr,
+        #     momentum=args.momentum, weight_decay=args.weight_decay)
+        optimizer = torch.optim.SGD([
+            {'params': backbone_neck_params},
+            {'params': detection_params, 'lr': args.lr * args.lr_coeff[1]},
+            {'params': identity_params, 'lr': args.lr * args.lr_coeff[2]}
+        ], lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay=args.weight_decay)
 
@@ -169,8 +205,8 @@ def train(args):
             warmup = min(args.warmup, len(data_loader))
             if epoch == 0 and batch <= warmup:
                 lr = args.lr * (batch / warmup) ** 4
-                for g in optimizer.param_groups:
-                    g['lr'] = lr
+                for i, g in enumerate(optimizer.param_groups):
+                    g['lr'] = lr * args.lr_coeff[i]
         
             loss, metrics = model(images.to(device), targets.to(device), size)
             loss.backward()

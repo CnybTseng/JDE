@@ -11,7 +11,6 @@ import torch.nn.functional as F
 
 import jde
 import iou
-import yolov3
 
 class ShuffleNetV2Block(torch.nn.Module):
     def __init__(self, in_channels, out_channels, mid_channels, kernel_size, stride):
@@ -55,7 +54,8 @@ class ShuffleNetV2Block(torch.nn.Module):
         return x[0], x[1]
 
 class ShuffleNetV2(torch.nn.Module):
-    def __init__(self, anchors, num_classes=1, num_ids=0, model_size='2.0x'):
+    def __init__(self, anchors=None, num_classes=1, num_ids=0, model_size='0.5x',
+        box_loss='smoothl1loss'):
         super(ShuffleNetV2, self).__init__()
         self.anchors = anchors
         self.num_classes = num_classes
@@ -195,8 +195,8 @@ class ShuffleNetV2(torch.nn.Module):
         '''Shared identifiers classifier'''
         
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
-        # self.criterion = yolov3.YOLOv3Loss(num_classes, anchors, num_ids, embd_dim=self.embedding_channels) if num_ids > 0 else torch.nn.Sequential()
-        self.criterion = jde.JDELoss(num_ids, embd_dim=self.embedding_channels)  if num_ids > 0 else torch.nn.Sequential()
+        box_loss = iou.DIOULoss() if box_loss == 'diouloss' else torch.nn.SmoothL1Loss()
+        self.criterion = jde.JDELoss(num_ids, embd_dim=self.embedding_channels, box_loss=box_loss)  if num_ids > 0 else torch.nn.Sequential()
         
         self.__init_weights()
         
@@ -261,8 +261,7 @@ class ShuffleNetV2(torch.nn.Module):
         return outputs
 
 if __name__ == '__main__':
-    anchors = np.random.randint(low=10, high=150, size=(12,2))
-    model = ShuffleNetV2(anchors, model_size='0.5x')
+    model = ShuffleNetV2()
     model.eval()
     x = torch.rand(1, 3, 320, 576)
     ys = model(x)

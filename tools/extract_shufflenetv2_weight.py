@@ -21,13 +21,11 @@ if __name__ == '__main__':
     parser.add_argument('--src-model', '-s', type=str, help='source model file')
     parser.add_argument('--dst-model', '-d', type=str, help='destination model file')
     parser.add_argument('--num-classes', type=int, default=1, help='number of classes')
-    parser.add_argument('--dataset', type=str, default='', help='dataset path')
+    parser.add_argument('--dataset', type=str, default='', help='dataset root path')
     args = parser.parse_args()
     print(args)
-    
-    # dataset = dataset.CustomDataset(args.dataset, 'train')
-    # num_ids = dataset.max_id + 2
-    dataset = dataset.HotchpotchDataset('/data/tseng/dataset/jde', './data/train.txt')
+
+    dataset = dataset.HotchpotchDataset(args.dataset, './data/train.txt')
     num_ids = int(dataset.max_id + 1)
     print(num_ids)
     
@@ -39,9 +37,8 @@ if __name__ == '__main__':
         model_size = '1.5x'
     elif '2.0x' in args.src_model:
         model_size = '2.0x'
-    
-    anchors = np.random.randint(low=10, high=150, size=(12,2))
-    model = shufflenetv2.ShuffleNetV2(anchors, num_classes=args.num_classes, num_ids=num_ids, model_size=model_size)
+
+    model = shufflenetv2.ShuffleNetV2(num_classes=args.num_classes, num_ids=num_ids, model_size=model_size)
     
     checkpoint = torch.load(args.src_model, map_location='cpu')
     if 'state_dict' in checkpoint:

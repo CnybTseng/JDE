@@ -18,15 +18,16 @@ import dataset
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--pytorch-model', '-pm', type=str, dest='pm', help='pytorch-format model file')
-    parser.add_argument('--dataset', type=str, default='', help='dataset path')
+    parser.add_argument('--dataset', type=str, default='', help='dataset root path')
     parser.add_argument('--num-classes', type=int, default=1, help='number of classes')
     parser.add_argument('--darknet-model', '-dm', type=str, dest='dm', default='darknet.weights', help='darknet-format model file')
     parser.add_argument('--load-backbone-only', '-lbo', dest='lbo', help='only load the backbone', action='store_true')
     args = parser.parse_args()
     
-    dataset = dataset.CustomDataset(args.dataset, 'train')
-    num_ids = dataset.max_id + 2
+    dataset = dataset.HotchpotchDataset(args.dataset, './data/train.txt')
+    num_ids = int(dataset.max_id + 1)
     print(num_ids)
+    
     model = darknet.DarkNet(np.random.randint(0, 100, (12, 2)), num_classes=args.num_classes, num_ids=num_ids)
     
     with open(args.dm, 'rb') as file:

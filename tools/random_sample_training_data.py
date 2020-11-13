@@ -1,4 +1,5 @@
 import os
+import sys
 import glob
 import argparse
 import numpy as np
@@ -6,13 +7,13 @@ import numpy as np
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', '-r', type=str,
     help='path to the dataset root directory')
-parser.add_argument('-path', type=str,
+parser.add_argument('--path', '-p', type=str,
     help='path to the dataset in root directory')
 parser.add_argument('--train-ratio', '-tr', dest='tr', type=float, default=0.8,
-    help='the ratio of training samples')
-parser.add_argument('--name', type=str,
-    help='dataset name')
-parser.add_argument('--save-path', type=str,
+    help='the ratio of training samples, default 0.8')
+parser.add_argument('--name', '-n', type=str,
+    help='generated dataset name')
+parser.add_argument('--save-path', '-sp', type=str,
     help='path to the generated dataset')
 args = parser.parse_args()
 

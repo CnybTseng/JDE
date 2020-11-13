@@ -34,12 +34,14 @@ def parse_args():
         help='nms iou threshold, default=0.4, it must be in [0,1]')
     parser.add_argument('--only-detect', action='store_true',
         help='only detecting object, no tracking')
-    parser.add_argument('--backbone', type=str, default='darknet',
-        help='backbone arch, default is darknet, candidate is shufflenetv2')
-    parser.add_argument('--thin', type=str, default='2.0x',
-        help='shufflenetv2 thin, default is 2.0x, candidates are 0.5x, 1.0x, 1.5x')
-    parser.add_argument('--embedding', '-emd', type=int, default=512,
-        help='embedding dimension, default is 512')
+    parser.add_argument('--backbone', type=str, default='shufflenetv2',
+        help='backbone arch, default is shufflenetv2, candidate is darknet')
+    parser.add_argument('--thin', type=str, default='0.5x',
+        help='shufflenetv2 thin, default is 0.5x, candidates are 0.5x, 1.0x, 1.5x')
+    parser.add_argument('--embedding', '-emd', type=int, default=128,
+        help='embedding dimension, default is 128')
+    parser.add_argument('--workspace', type=str, default='workspace',
+        help='workspace path')
     return parser.parse_args()
 
 def mkdir(path):
@@ -584,15 +586,17 @@ def main(args):
                    (128,384), (180,540), (256,640), (512,640))
 
     h, w = [int(s) for s in args.insize.split('x')]
-    # decoder = yolov3.YOLOv3Decoder((h,w), 1, anchors, embd_dim=args.embedding)
     decoder = jde.JDEcoder((h, w), embd_dim=args.embedding)
     tracker = JDETracker()
-    dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
+    if os.path.isfile(args.img_path):
+        dataloader = dataset.VideoLoader(args.img_path, (h,w,3))
+    else:
+        dataloader = dataset.ImagesLoader(args.img_path, (h,w,3), formats=['*.jpg', '*.png'])
     
     strs = re.split(r'[\\, /]', args.img_path)
-    imgpath = os.path.join('result', strs[-3], 'img')
+    imgpath = os.path.join(args.workspace, 'result', strs[-3], 'img')
     mkdir(imgpath)
-    traj_path = os.path.join('result', strs[-3], '{}.txt'.format(strs[-3]))
+    traj_path = os.path.join(args.workspace, 'result', '{}.txt'.format(strs[-3]))
     
     os.system('rm -f {}'.format(os.path.join(imgpath, '*')))
     for i, (path, im, lb_im) in enumerate(dataloader):
@@ -619,9 +623,9 @@ def main(args):
             result = overlap(outputs, im)
         segments = re.split(r'[\\, /]', path)
         cv2.imwrite(os.path.join(imgpath, segments[-1]), result)
-    
-    if os.path.isfile('./bin/ffmpeg'):
-        os.system('./bin/ffmpeg -i {} result.mp4 -y'.format(os.path.join(imgpath, '%06d.jpg')))
+
+    os.system('ffmpeg -i {} {}.mp4 -y'.format(os.path.join(imgpath, '%06d.jpg'),
+        os.path.join(args.workspace, 'result', strs[-3])))
 
 if __name__ == '__main__':
     args = parse_args()

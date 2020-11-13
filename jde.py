@@ -167,9 +167,9 @@ class JDELoss(JDEcoder):
         self.lf_box = box_loss if box_loss else nn.SmoothL1Loss()
         self.lf_cls = cls_loss if cls_loss else nn.CrossEntropyLoss(ignore_index=-1)
         self.lf_ide = ide_loss if ide_loss else nn.CrossEntropyLoss(ignore_index=-1)
-        self.s_box = nn.Parameter(torch.FloatTensor([-4.85, -4.85, -4.85]))
-        self.s_cls = nn.Parameter(torch.FloatTensor([-4.15, -4.15, -4.15]))
-        self.s_ide = nn.Parameter(torch.FloatTensor([-2.30, -2.30, -2.30]))
+        self.s_box = nn.Parameter(torch.FloatTensor([0, 0, 0]))
+        self.s_cls = nn.Parameter(torch.FloatTensor([0, 0, 0]))
+        self.s_ide = nn.Parameter(torch.FloatTensor([0, 0, 0]))
     
     def forward(self, input, target, im_size, classifier):
         '''JDELoss forward propagation.
@@ -196,7 +196,7 @@ class JDELoss(JDEcoder):
             det = det.view(n, num_anchor, self.box_dim + self.class_dim, h, w)          # NACHW
             box = det[:, :, : self.box_dim, ...].permute(0, 1, 3, 4, 2).contiguous()    # NAHWC
             if isinstance(self.lf_box, DIOULoss):
-                box = self._decode_box(box, anchor, w, h) / stride
+                box = self._decode_box(box, anchor, w, h)
             cls = det[:, :, self.box_dim: , ...].permute(0, 2, 1, 3, 4).contiguous()    # NCAHW
             
             # Identify embedding predictions.
@@ -300,7 +300,7 @@ class JDELoss(JDEcoder):
             ac_box_left = torch.cat(ac_box_left, dim=0)
             box[obj_mask] = self._encode_box(tg_box_left, ac_box_left)
         else:
-            box[obj_mask] = tg_box_left
+            box[obj_mask] = tg_box_left * im_size[0] / h
         
         # Mask class probability ground truth.
         cls[obj_mask] = 1

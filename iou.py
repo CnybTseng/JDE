@@ -118,29 +118,15 @@ class DIOULoss(nn.Module):
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     
-    def _decode_box(box, anchor, gx, gy, gw, gh, im_size):
-        aw, ah = anchor
-        dbox = torch.zeros_like(box, requires_grad=True)
-        dbox[0, 0] = box[0, 0] * aw + gx * im_size[1] / gw  # x
-        dbox[0, 1] = box[0, 1] * ah + gy * im_size[0] / gh  # y
-        dbox[0, 2] = torch.exp(box[0, 2]) * aw              # w
-        dbox[0, 3] = torch.exp(box[0, 3]) * ah              # h
-        return dbox
-    
     width = 576
     height = 320    
-    lr = 1
+    lr = 0.1
     diou = DIOULoss()
-    stride = 32
-    anchor = [6, 16]
-    gx, gy = 280, 170
-    gw, gh = width / stride, height / stride
-    im_size = [height, width]
     
-    init = torch.FloatTensor([280, 170, 1, 1]).view(-1, 4) / stride
-    print('init: {}'.format(init))
+    init = torch.FloatTensor([280, 170, 1, 1]).view(-1, 4)
+    print('initial prediction: {}'.format(init))
     
-    gt = torch.FloatTensor([288, 160, 16, 16]).view(-1, 4) / stride
+    gt = torch.FloatTensor([288, 160, 16, 16]).view(-1, 4)
     print('ground truth: {}'.format(gt))
        
     pred = init
@@ -148,7 +134,6 @@ if __name__ == '__main__':
     iou_diou = []
     for epoch in range(10000):
         pred.requires_grad_(True)
-        pred = _decode_box(pred, anchor, gx, gy, gw, gh, im_size)
         loss = criterion(pred, gt)
         loss.backward()
         with torch.no_grad():
@@ -161,7 +146,6 @@ if __name__ == '__main__':
     iou_sml1 = []
     for epoch in range(10000):
         pred.requires_grad_(True)
-        pred = _decode_box(pred, anchor, gx, gy, gw, gh, im_size)
         loss = criterion(pred, gt)
         loss.backward()
         with torch.no_grad():
@@ -172,8 +156,8 @@ if __name__ == '__main__':
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.set_title('DIOULoss(red) VS SmoothL1Loss(blue)')
-    ax.set_xlabel('iteration')
-    ax.set_ylabel('iou')
+    ax.set_xlabel('Iteration')
+    ax.set_ylabel('IOU')
     ax.plot(iou_diou, 'r-')
     ax.plot(iou_sml1, 'b-')
-    fig.savefig('converge.png', dpi=1200)
+    fig.savefig('./workspace/converge.png', dpi=2000)
