@@ -23,13 +23,16 @@ _C.MODEL.ARGS.INPUT.WIDTH = 576
 _C.MODEL.ARGS.INPUT.HEIGHT = 320
 _C.MODEL.ARGS.BACKBONE = CN()
 _C.MODEL.ARGS.BACKBONE.NAME = "ShuffleNetV2"
-_C.MODEL.ARGS.BACKBONE.ARGS = [{"ARCH": "0.5x"}]
+_C.MODEL.ARGS.BACKBONE.ARGS = [{
+    'stage_repeat': {'stage2': 4, 'stage3': 8, 'stage4': 4},
+    'stage_out_channels': {'conv1': 24, 'stage2': 48, 'stage3': 96, 'stage4': 192, 'conv5': 1024},
+    'pretrained': '/home/image/tseng/project/JDE/models/ShuffleNetV2.0.5x.pth.tar'}]
 _C.MODEL.ARGS.NECK = CN()
 _C.MODEL.ARGS.NECK.NAME = "FPN"
-_C.MODEL.ARGS.NECK.ARGS = []
+_C.MODEL.ARGS.NECK.ARGS = [{}]
 _C.MODEL.ARGS.HEAD = CN()
 _C.MODEL.ARGS.HEAD.NAME = "JDELoss"
-_C.MODEL.ARGS.HEAD.ARGS = []
+_C.MODEL.ARGS.HEAD.ARGS = [{}]
 _C.MODEL.ARGS.LOSS = CN()
 _C.MODEL.ARGS.LOSS.BOX = "DIOULoss"
 _C.MODEL.ARGS.LOSS.CLASS = "CrossEntropyLoss"

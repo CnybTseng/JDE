@@ -47,6 +47,12 @@ static void do_work(int argc, char* argv[], const char* path)
         save = atoi(argv[4]);
     }
     
+    int iters = 1;
+    if (argc > 5)
+    {
+        iters = atoi(argv[5]);
+    }
+    
     // 创建存放结果的目录
     std::stringstream ss;
     ss << tid;
@@ -67,106 +73,109 @@ static void do_work(int argc, char* argv[], const char* path)
     if (ret)
         return;
     
-    // OpenCV绘图相关参数
-    mot::MOT_Result result;
-    int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
-    double fontscale = 1;
-    int thickness = 1;
-    
-    // 读取目录中的文件
-    dirent **dir = NULL;
-    int num = scandir(path, &dir, 0, alphasort);
-    float latency = 0;
-    for (int i = 0; i < num; ++i)
+    for (int test = 0; test < iters; ++test)
     {
-        // 只处理jpg后缀文件
-        if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
-            continue;
+        // OpenCV绘图相关参数
+        mot::MOT_Result result;
+        int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
+        double fontscale = 1;
+        int thickness = 1;
+        
+        // 读取目录中的文件
+        dirent **dir = NULL;
+        int num = scandir(path, &dir, 0, alphasort);
+        float latency = 0;
+        for (int i = 0; i < num; ++i)
+        {
+            // 只处理jpg后缀文件
+            if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
+                continue;
 
-        char filein[128] = {0};
-        strcat(filein, path);
-        strcat(filein, dir[i]->d_name);
-        
-        // 读取图像文件和解码成BGR888
-        cv::Mat bgr = cv::imread(filein);
-        if (bgr.empty())
-        {
-            fprintf(stdout, "cv::imread(%s) fail!\n", filein);
-            continue;
-        }
-#if (!PROFILE)
-        auto start = std::chrono::high_resolution_clock::now();
-#endif
-        // 3. 执行推理, 检测和跟踪目标
-        ret = mot::forward_mot_model(bgr.data, bgr.cols, bgr.rows, bgr.step, result);
-#if (!PROFILE)
-        auto end = std::chrono::high_resolution_clock::now();
-        latency = std::chrono::duration<float, std::milli>(end - start).count();
-        fprintf(stdout, "\r%s: %s %fms", ss.str().c_str(), filein, latency);
-#else
-        fprintf(stdout, "\r%s: %s", ss.str().c_str(), filein);
-#endif
-        fflush(stdout);
-        
-        if (save)
-        {
-            // 叠加检测和跟踪结果到图像上
-            std::vector<mot::MOT_Track>::iterator riter;
-            for (riter = result.begin(); riter != result.end(); riter++)
-            {
-                cv::Point pt1;
-                std::deque<mot::MOT_Rect>::iterator iter;
-                for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
-                {
-                    int l = static_cast<int>(iter->left);
-                    int t = static_cast<int>(iter->top);
-                    int r = static_cast<int>(iter->right);
-                    int b = static_cast<int>(iter->bottom);
-                    
-                    // 过滤无效的检测框
-                    if (l == 0 && t == 0 && r == 0 && b == 0)
-                        break;
-                    
-                    // 画轨迹
-                    srand(riter->identifier);
-                    cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
-                    if (iter != riter->rects.begin())
-                    {
-                        cv::Point pt2 = cv::Point((l + r) >> 1, b);
-                        cv::line(bgr, pt1, pt2, color, 2);
-                        pt1 = pt2;
-                        continue;
-                    }
-                    
-                    // 画边框                
-                    cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), color, 2);
-                    
-                    // 叠加轨迹ID号
-                    std::ostringstream oss;
-                    oss << riter->identifier;
-                    cv::String text = oss.str();
-                    
-                    int baseline;
-                    cv::Size tsize = cv::getTextSize(text, fontface, fontscale, thickness, &baseline);
-                    
-                    int x = std::min(std::max(l, 0), bgr.cols - tsize.width - 1);
-                    int y = std::min(std::max(b - baseline, tsize.height), bgr.rows - baseline - 1);
-                    cv::putText(bgr, text, cv::Point(x, y), fontface, fontscale, cv::Scalar(0,255,255), thickness);
-                    
-                    pt1 = cv::Point((l + r) >> 1, b);
-                }
-            }
+            char filein[128] = {0};
+            strcat(filein, path);
+            strcat(filein, dir[i]->d_name);
             
-            // 保存结果图像
-            char fileout[128] = {0};
-            strcat(fileout, resdir.c_str());
-            strcat(fileout, dir[i]->d_name);
-            cv::imwrite(fileout, bgr);
+            // 读取图像文件和解码成BGR888
+            cv::Mat bgr = cv::imread(filein);
+            if (bgr.empty())
+            {
+                fprintf(stdout, "cv::imread(%s) fail!\n", filein);
+                continue;
+            }
+#if (!PROFILE)
+            auto start = std::chrono::high_resolution_clock::now();
+#endif
+            // 3. 执行推理, 检测和跟踪目标
+            ret = mot::forward_mot_model(bgr.data, bgr.cols, bgr.rows, bgr.step, result);
+#if (!PROFILE)
+            auto end = std::chrono::high_resolution_clock::now();
+            latency = std::chrono::duration<float, std::milli>(end - start).count();
+            fprintf(stdout, "\r%s: %s %fms", ss.str().c_str(), filein, latency);
+#else
+            fprintf(stdout, "\r%s: %s", ss.str().c_str(), filein);
+#endif
+            fflush(stdout);
+            
+            if (save)
+            {
+                // 叠加检测和跟踪结果到图像上
+                std::vector<mot::MOT_Track>::iterator riter;
+                for (riter = result.begin(); riter != result.end(); riter++)
+                {
+                    cv::Point pt1;
+                    std::deque<mot::MOT_Rect>::iterator iter;
+                    for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
+                    {
+                        int l = static_cast<int>(iter->left);
+                        int t = static_cast<int>(iter->top);
+                        int r = static_cast<int>(iter->right);
+                        int b = static_cast<int>(iter->bottom);
+                        
+                        // 过滤无效的检测框
+                        if (l == 0 && t == 0 && r == 0 && b == 0)
+                            break;
+                        
+                        // 画轨迹
+                        srand(riter->identifier);
+                        cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
+                        if (iter != riter->rects.begin())
+                        {
+                            cv::Point pt2 = cv::Point((l + r) >> 1, b);
+                            cv::line(bgr, pt1, pt2, color, 2);
+                            pt1 = pt2;
+                            continue;
+                        }
+                        
+                        // 画边框                
+                        cv::rectangle(bgr, cv::Point(l, t), cv::Point(r, b), color, 2);
+                        
+                        // 叠加轨迹ID号
+                        std::ostringstream oss;
+                        oss << riter->identifier;
+                        cv::String text = oss.str();
+                        
+                        int baseline;
+                        cv::Size tsize = cv::getTextSize(text, fontface, fontscale, thickness, &baseline);
+                        
+                        int x = std::min(std::max(l, 0), bgr.cols - tsize.width - 1);
+                        int y = std::min(std::max(b - baseline, tsize.height), bgr.rows - baseline - 1);
+                        cv::putText(bgr, text, cv::Point(x, y), fontface, fontscale, cv::Scalar(0,255,255), thickness);
+                        
+                        pt1 = cv::Point((l + r) >> 1, b);
+                    }
+                }
+                
+                // 保存结果图像
+                char fileout[128] = {0};
+                strcat(fileout, resdir.c_str());
+                strcat(fileout, dir[i]->d_name);
+                cv::imwrite(fileout, bgr);
+            }
+            free(dir[i]);
         }
-        free(dir[i]);
+        
+        free(dir);
     }
-    
-    free(dir);
     // 4. 卸载MOT模型
     mot::unload_mot_model();
     fprintf(stdout, "\n");
@@ -186,7 +195,7 @@ int main(int argc, char *argv[])
     ImgAlgRegisterLogSystemCallBack((PFUN_LogSystemCallBack)log_fprintf);
     if (argc < 3)
     {
-        fprintf(stderr, "Usage:\n%s cfg_path images_path [num_thread,[save<0,1>]]\n", argv[0]);
+        fprintf(stderr, "Usage:\n%s cfg_path images_path [num_thread,[save<0,1>], iters]\n", argv[0]);
         return -1;
     }
     

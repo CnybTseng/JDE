@@ -79,7 +79,8 @@ void TKalmanFilter::project(cv::Mat &mean, cv::Mat &covariance) const
     gemm(temp, measurementMatrix, 1, measurementNoiseCov_, 1, covariance, cv::GEMM_2_T);
 }
 
-int Trajectory::count = 0;
+std::map<std::thread::id, int> Trajectory::count = std::map<std::thread::id, int>();
+std::map<std::thread::id, std::list<int>> Trajectory::reused_id = std::map<std::thread::id, std::list<int>>();
 
 const cv::Mat &Trajectory::predict(void)
 {
@@ -226,6 +227,25 @@ TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPool &b)
     std::vector<int> ids(b.size());
     for (size_t i = 0; i < b.size(); ++i)
         ids[i] = b[i].id;
+    
+    TrajectoryPoolIterator piter;
+    for (piter = a.begin(); piter != a.end(); )
+    {
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), piter->id);
+        if (iter == ids.end())
+            ++piter;
+        else
+            piter = a.erase(piter);
+    }
+    
+    return a;
+}
+
+TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPtrPool &b)
+{
+    std::vector<int> ids(b.size());
+    for (size_t i = 0; i < b.size(); ++i)
+        ids[i] = b[i]->id;
     
     TrajectoryPoolIterator piter;
     for (piter = a.begin(); piter != a.end(); )

@@ -1,6 +1,9 @@
 #ifndef TRAJECTORY_H
 #define TRAJECTORY_H
 
+#include <map>
+#include <list>
+#include <thread>
 #include <vector>
 #include <opencv2/opencv.hpp>
 
@@ -64,6 +67,7 @@ public:
     friend TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPool &b);
+    friend TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, TrajectoryPool &b);
     friend TrajectoryPtrPool operator-(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
@@ -87,7 +91,8 @@ public:
     int timestamp;
     int starttime;
 private:
-    static int count;
+    static std::map<std::thread::id, int> count;
+    static std::map<std::thread::id, std::list<int>> reused_id;
     cv::Vec4f xyah;
     float score;
     cv::Mat current_embedding;
@@ -162,8 +167,14 @@ inline Trajectory &Trajectory::operator=(const Trajectory &rhs)
 
 inline int Trajectory::next_id()
 {
-    ++count;
-    return count;
+    std::thread::id tid = std::this_thread::get_id();
+    if (reused_id[tid].size() > 0) {
+        int rid = reused_id[tid].front();
+        reused_id[tid].pop_front();
+        return rid;
+    }
+    ++count[tid];
+    return count[tid];
 }
 
 inline void Trajectory::mark_lost(void)
@@ -174,6 +185,8 @@ inline void Trajectory::mark_lost(void)
 inline void Trajectory::mark_removed(void)
 {
     state = Removed;
+    std::thread::id tid = std::this_thread::get_id();
+    reused_id[tid].push_back(id);
 }
 
 }   // namespace mot

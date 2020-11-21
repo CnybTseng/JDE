@@ -7,4 +7,4 @@ class JDELoss(nn.Module):
         super(JDELoss, self).__init__()
     
     def forward(self, input):
-        pass
+        return input

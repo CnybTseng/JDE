@@ -6,6 +6,7 @@ NECKS = Registry('necks')
 HEADS = Registry('heads')
 LOSSES = Registry('losses')
 TRACKERS = Registry('trackers')
+BLOCKS = Registry('blocks')
 
 def build(register, config):
     '''Build module from yaml format configurations.
@@ -27,20 +28,24 @@ def build(register, config):
 
 def build_backbone(config):
     """Build backbone"""
-    build(BACKBONES, config)
+    return build(BACKBONES, config)
 
 def build_neck(config):
     """Build neck"""
-    build(NECKS, config)
+    return build(NECKS, config)
     
 def build_head(config):
     """Build task head"""
-    build(HEADS, config)
+    return build(HEADS, config)
 
 def build_loss(config):
     """Build loss"""
-    build(LOSSES, config)
+    return build(LOSSES, config)
 
 def build_tracker(config):
     """Build multiple object tracker"""
-    build(TRACKERS, config)
+    return build(TRACKERS, config)
+
+def build_block(config):
+    """Build universal blocks"""
+    return build(BLOCKS, config)

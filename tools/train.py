@@ -1,4 +1,5 @@
 import os
+import torch
 import argparse
 from mot.utils import config
 from mot.models import build_tracker
@@ -22,6 +23,11 @@ def main():
     
     model = build_tracker(config.MODEL)
     print(model)
+    
+    input = torch.rand(64, 3, 320, 576)
+    outputs = model(input)
+    for output in outputs:
+        print('output size: {}'.format(output.size()))
     
 if __name__ == '__main__':
     main()

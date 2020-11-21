@@ -10,7 +10,7 @@
 #include "jdeutils.h"
 #include "jdetracker.h"
 
-#define MAXIMUM_CANDIDATES 1000
+#define RESERVE_TRACK_NUM 10240
 #define mat2vec4f(m) cv::Vec4f(*m.ptr<float>(0,0), *m.ptr<float>(0,1), *m.ptr<float>(0,2), *m.ptr<float>(0,3))
 
 namespace mot {
@@ -44,7 +44,10 @@ bool JDETracker::init(void)
 {
     bool ret = LAPJV::instance()->init();
     check_error_ret(!ret, false, "solver init fail!\n");
-    candidates.reserve(MAXIMUM_CANDIDATES);
+    candidates.reserve(RESERVE_TRACK_NUM);
+    tracked_trajectories.reserve(RESERVE_TRACK_NUM);
+    lost_trajectories.reserve(RESERVE_TRACK_NUM);
+    removed_trajectories.reserve(RESERVE_TRACK_NUM);
     return true;
 }
 
@@ -55,6 +58,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
 #endif
     ++timestamp;
     candidates.resize(dets.rows);
+    removed_trajectories.clear();
 #if PROFILE_TRACKER
     profiler.reportLayerTime("create_candi", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - create_candi).count());
@@ -85,7 +89,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
             unconfirmed_trajectories.push_back(&this->tracked_trajectories[i]);
     }
 
-    TrajectoryPtrPool trajectory_pool = tracked_trajectories + this->lost_trajectories;
+    TrajectoryPtrPool trajectory_pool = tracked_trajectories + lost_trajectories;
 #if PROFILE_TRACKER
     profiler.reportLayerTime("init_trajpool", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - init_trajpool).count());
@@ -176,18 +180,17 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     profiler.reportLayerTime("iou", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - start_iou).count());
     auto start_lost_iou = std::chrono::high_resolution_clock::now();
-#endif    
-    TrajectoryPtrPool lost_trajectories;
+#endif
     for (size_t i = 0; i < mismatch_row.size(); ++i)
     {
         Trajectory *pt = next_trajectory_pool[mismatch_row[i]];
         if (pt->state != Lost)
         {
             pt->mark_lost();
-            lost_trajectories.push_back(pt);
+            lost_trajectories.push_back(*pt); // Deep copy.
         }
     }
-    
+
     TrajectoryPtrPool nnext_candidates(mismatch_col.size());
     for (size_t i = 0; i < mismatch_col.size(); ++i)
         nnext_candidates[i] = next_candidates[mismatch_col[i]];
@@ -204,12 +207,11 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     profiler.reportLayerTime("lost iou", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - start_lost_iou).count());
     auto start_left_work = std::chrono::high_resolution_clock::now();
-#endif     
-    TrajectoryPtrPool removed_trajectories;
+#endif
     for (size_t i = 0; i < mismatch_row.size(); ++i)
     {
         unconfirmed_trajectories[mismatch_row[i]]->mark_removed();
-        removed_trajectories.push_back(unconfirmed_trajectories[mismatch_row[i]]);
+        removed_trajectories.push_back(*unconfirmed_trajectories[mismatch_row[i]]); // Deep copy.
     }
     
     for (size_t i = 0; i < mismatch_col.size(); ++i)
@@ -218,32 +220,31 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         activated_trajectories.push_back(nnext_candidates[mismatch_col[i]]);
     }
     
-    for (size_t i = 0; i < this->lost_trajectories.size(); ++i)
+    for (size_t i = 0; i < lost_trajectories.size(); ++i)
     {
-        Trajectory &lt = this->lost_trajectories[i];
+        Trajectory &lt = lost_trajectories[i];
         if (timestamp - lt.timestamp > max_lost_time)
         {
             lt.mark_removed();
-            removed_trajectories.push_back(&lt);
+            removed_trajectories.push_back(lt); // Deep copy.
         }
     }
-    
+
+    this->tracked_trajectories += activated_trajectories;   // Deep copy.
+    this->tracked_trajectories += retrieved_trajectories;   // Deep copy.
     TrajectoryPoolIterator piter;
     for (piter = this->tracked_trajectories.begin(); piter != this->tracked_trajectories.end(); )
     {
-        if (piter->state != Tracked)
+        if (piter->state != Tracked) {
             piter = this->tracked_trajectories.erase(piter);
-        else
+        }else
             ++piter;
     }
     
-    this->tracked_trajectories += activated_trajectories;
-    this->tracked_trajectories += retrieved_trajectories;
-    this->lost_trajectories -= this->tracked_trajectories;
-    this->lost_trajectories += lost_trajectories;
-    this->lost_trajectories -= this->removed_trajectories;
-    this->removed_trajectories += removed_trajectories;
-    remove_duplicate_trajectory(this->tracked_trajectories, this->lost_trajectories);
+    removed_trajectories -= this->tracked_trajectories;
+    lost_trajectories -= this->tracked_trajectories;
+    lost_trajectories -= removed_trajectories;
+    remove_duplicate_trajectory(this->tracked_trajectories, lost_trajectories);
     
     tracks.clear();
     for (size_t i = 0; i < this->tracked_trajectories.size(); ++i)

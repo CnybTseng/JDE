@@ -94,8 +94,8 @@ def build_from_config(register, config):
     Param
     -----
     register: Module registry
-    config  : YAML format configurations. The config must contain 'module_name'
-              and 'args' entries.
+    config  : YAML format configurations. The config must contain 'NAME'
+              and 'ARGS' entries.
     
     Return
     ------
@@ -116,4 +116,11 @@ def build_from_config(register, config):
     else:
         raise TypeError("{} must be string type, but got {}".format(
             module_name, type(module_name)))
-    return module(config.ARGS)
+    
+    if isinstance(config.ARGS, CN):
+        return module(config.ARGS)
+    elif isinstance(config.ARGS, list):
+        return module(**config.ARGS[0])
+    else:
+        raise TypeError('{} must be a yacs.config.CfgNode or list,'
+            ' but got {}'.format(config.ARGS, type(config.ARGS)))
