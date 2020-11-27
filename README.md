@@ -3,21 +3,21 @@ Towards Real-Time Multi-Object Tracking
 
 # 1. 训练步骤
 
-以下操作步骤均以MOT16为例
+<del>以下操作步骤均以MOT16为例</del>
 
-## 1.1 准备数据集
+<del>## 1.1 准备数据集</del>
 
-* 从MOT挑战赛官网下载数据集并解压 <br>
-wget https://motchallenge.net/data/MOT16.zip -P /data/tseng/dataset/jde <br>
-cd /data/tseng/dataset/jde <br>
-unzip MOT16.zip -d MOT16 <br>
+<del>* 从MOT挑战赛官网下载数据集并解压 <br></del>
+<del>wget https://motchallenge.net/data/MOT16.zip -P /data/tseng/dataset/jde <br></del>
+<del>cd /data/tseng/dataset/jde <br></del>
+<del>unzip MOT16.zip -d MOT16 <br></del>
 
-* 创建MOT16任务的工作区, 并将MOT格式标注文件转换为需要格式的标注文件 <br>
-git clone https://github.com/CnybTseng/JDE.git <br>
-cd JDE <br>
-mkdir -p workspace/mot16-2020-5-29 <br>
-./tools/split_dataset.sh ./workspace/mot16-2020-5-29 <br>
-此时workspace/mot16-2020-5-29目录下会生成train.txt <br>
+<del>* 创建MOT16任务的工作区, 并将MOT格式标注文件转换为需要格式的标注文件 <br></del>
+<del>git clone https://github.com/CnybTseng/JDE.git <br></del>
+<del>cd JDE <br></del>
+<del>mkdir -p workspace/mot16-2020-5-29 <br></del>
+<del>./tools/split_dataset.sh ./workspace/mot16-2020-5-29 <br></del>
+<del>此时workspace/mot16-2020-5-29目录下会生成train.txt <br></del>
 
 ## 1.2 从预训练模型导出参数生成JDE初始模型
 
@@ -34,6 +34,6 @@ cp ./tools/train.sh ./train.sh <br>
 ./train.sh <br>
 
 # 2. 测试
-本项目实现了卡尔曼滤波的目标关联算法, 运行类似如下命令执行多目标跟踪 <br>
+运行类似如下命令执行多目标跟踪 <br>
 python tracker.py --img-path /data/tseng/dataset/jde/MOT16/test/MOT16-03/img1 \ <br>
     --model workspace/mot16-2020-5-29/checkpoint/jde-ckpt-049.pth
