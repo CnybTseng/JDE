@@ -2,6 +2,7 @@
 #define JDETRACKER_H
 
 #include <map>
+#include <list>
 #include <vector>
 #include <opencv2/opencv.hpp>
 
@@ -32,14 +33,15 @@ private:
     cv::Mat motion_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
     void linear_assignment(const cv::Mat &cost, float cost_limit, Match &matches,
         std::vector<int> &mismatch_row, std::vector<int> &mismatch_col);
-    void remove_duplicate_trajectory(TrajectoryPool &a, TrajectoryPool &b, float iou_thresh=0.15f);
+    void remove_duplicate_trajectory(TrajectoryPtrPool &a, TrajectoryPtrPool &b, float iou_thresh=0.15f);
 private:
     static JDETracker *me;
     int timestamp;
     TrajectoryPool candidates;
-    TrajectoryPool tracked_trajectories;
-    TrajectoryPool lost_trajectories;
-    TrajectoryPool removed_trajectories;
+    std::list<Trajectory> trajectories;
+    TrajectoryPtrPool tracked_trajectories;
+    TrajectoryPtrPool lost_trajectories;
+    TrajectoryPtrPool removed_trajectories;
     int max_lost_time;
     float lambda;
 };

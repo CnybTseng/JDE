@@ -22,8 +22,18 @@ if not os.path.isfile(cachefile):
     for batch, (images, targets) in enumerate(data_loader):
         n, c, h, w = images.size()
         if targets.size(0) > 0:
-            boxw0.append((targets[:, 5] * w).numpy().round().astype(np.int).tolist())
-            boxh0.append((targets[:, 6] * h).numpy().round().astype(np.int).tolist())
+            tw = (targets[:, 5] * w).numpy().round().astype(np.int)
+            th = (targets[:, 6] * h).numpy().round().astype(np.int)
+            mask = (tw < 8) | (th < 8)
+            if mask.sum() > 0:
+                with open('error_box.txt', 'a') as file:
+                    file.write('{}\n'.format(targets.numpy()))
+                    file.write('{}x{}\n'.format(h, w))
+                    file.write('{}\n'.format(tw))
+                    file.write('{}\n\n\n'.format(th))
+                    file.close()
+            boxw0.append(tw[~mask].tolist())
+            boxh0.append(th[~mask].tolist())
         print('\rDeal {}/{}'.format(batch, len(data_loader)), end='', flush=True)
         # if batch > 100: break
     with open(cachefile, 'wb') as file:
@@ -32,6 +42,7 @@ else:
     with open(cachefile, 'rb') as file:
         boxw0, boxh0 = pickle.load(file)
 
+print('')
 boxw, boxh = [], []
 for bw0, bh0 in zip(boxw0, boxh0):
     boxw += bw0
@@ -54,8 +65,8 @@ area_sorted = area_nocopy.copy()
 area_sorted.sort()
 print('min(area): {}, max(area): {}'.format(area_sorted[0], area_sorted[-1]))
 n = len(area_sorted)
-small_object_thresh = area_sorted[round(n / 3)]
-median_object_thresh = area_sorted[round(n * 2 / 3)]
+small_object_thresh = 32*32 # area_sorted[round(n / 3)]
+median_object_thresh = 96*96 # area_sorted[round(n * 2 / 3)]
 print('small_object_thresh: {}, median_object_thresh: {}'.format(small_object_thresh, median_object_thresh))
 
 small_object_ratio, median_object_ratio, large_object_ratio = [], [], []
@@ -63,9 +74,9 @@ for bw0, bh0 in zip(boxw0, boxh0):
     area0 = np.array([w * h for w, h in zip(bw0, bh0)])
     small_mask = area0 < small_object_thresh
     media_mask = area0 < median_object_thresh
-    small_object_ratio.append(sum(small_mask) / len(area0))
-    median_object_ratio.append(sum(~small_mask & media_mask) / len(area0))
-    large_object_ratio.append(sum(~media_mask) / len(area0))
+    small_object_ratio.append(sum(small_mask) / (len(area0) + 1e-9))
+    median_object_ratio.append(sum(~small_mask & media_mask) / (len(area0) + 1e-9))
+    large_object_ratio.append(sum(~media_mask) / (len(area0) + 1e-9))
 small_object_ratio = np.array(small_object_ratio)
 median_object_ratio = np.array(median_object_ratio)
 large_object_ratio = np.array(large_object_ratio)

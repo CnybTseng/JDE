@@ -108,7 +108,7 @@ class FPN(nn.Module):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0)
         
-    def forward(self, input):
+    def forward(self, input, *args, **kwargs):
         """FPN forward"""
         assert(len(input) == len(self.in_channels))
         # Lateral path.

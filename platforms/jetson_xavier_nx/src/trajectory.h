@@ -5,6 +5,7 @@
 #include <list>
 #include <thread>
 #include <vector>
+#include <ostream>
 #include <opencv2/opencv.hpp>
 
 namespace mot {
@@ -65,9 +66,12 @@ public:
     friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPool operator+(const TrajectoryPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b);
+    friend TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPool &b);
+    friend TrajectoryPtrPool &operator+=(TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPool &b);
     friend TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPtrPool &b);
+    friend TrajectoryPtrPool &operator-=(TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend TrajectoryPtrPool operator+(const TrajectoryPtrPool &a, TrajectoryPool &b);
     friend TrajectoryPtrPool operator-(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
@@ -80,6 +84,7 @@ public:
     friend cv::Mat iou_distance(const TrajectoryPool &a, const TrajectoryPool &b);
     friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPtrPool &b);
     friend cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b);
+    friend std::ostream& operator<<(std::ostream& os, Trajectory& trajectory);
 private:   
     void update_embedding(const cv::Mat &embedding);
 public:
@@ -185,8 +190,8 @@ inline void Trajectory::mark_lost(void)
 inline void Trajectory::mark_removed(void)
 {
     state = Removed;
-    std::thread::id tid = std::this_thread::get_id();
-    reused_id[tid].push_back(id);
+    // std::thread::id tid = std::this_thread::get_id();
+    // reused_id[tid].push_back(id);
 }
 
 }   // namespace mot

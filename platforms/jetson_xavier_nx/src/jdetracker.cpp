@@ -10,7 +10,7 @@
 #include "jdeutils.h"
 #include "jdetracker.h"
 
-#define RESERVE_TRACK_NUM 10240
+#define RESERVE_TRACK_NUM 1024
 #define mat2vec4f(m) cv::Vec4f(*m.ptr<float>(0,0), *m.ptr<float>(0,1), *m.ptr<float>(0,2), *m.ptr<float>(0,3))
 
 namespace mot {
@@ -45,9 +45,6 @@ bool JDETracker::init(void)
     bool ret = LAPJV::instance()->init();
     check_error_ret(!ret, false, "solver init fail!\n");
     candidates.reserve(RESERVE_TRACK_NUM);
-    tracked_trajectories.reserve(RESERVE_TRACK_NUM);
-    lost_trajectories.reserve(RESERVE_TRACK_NUM);
-    removed_trajectories.reserve(RESERVE_TRACK_NUM);
     return true;
 }
 
@@ -58,7 +55,6 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
 #endif
     ++timestamp;
     candidates.resize(dets.rows);
-    removed_trajectories.clear();
 #if PROFILE_TRACKER
     profiler.reportLayerTime("create_candi", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - create_candi).count());
@@ -83,13 +79,13 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     TrajectoryPtrPool unconfirmed_trajectories;
     for (size_t i = 0; i < this->tracked_trajectories.size(); ++i)
     {
-        if (this->tracked_trajectories[i].is_activated)
-            tracked_trajectories.push_back(&this->tracked_trajectories[i]);
+        if (this->tracked_trajectories[i]->is_activated)
+            tracked_trajectories.push_back(this->tracked_trajectories[i]);
         else
-            unconfirmed_trajectories.push_back(&this->tracked_trajectories[i]);
+            unconfirmed_trajectories.push_back(this->tracked_trajectories[i]);
     }
 
-    TrajectoryPtrPool trajectory_pool = tracked_trajectories + lost_trajectories;
+    TrajectoryPtrPool trajectory_pool = tracked_trajectories + this->lost_trajectories;
 #if PROFILE_TRACKER
     profiler.reportLayerTime("init_trajpool", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - init_trajpool).count());
@@ -181,13 +177,14 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         std::chrono::high_resolution_clock::now() - start_iou).count());
     auto start_lost_iou = std::chrono::high_resolution_clock::now();
 #endif
+    TrajectoryPtrPool lost_trajectories;
     for (size_t i = 0; i < mismatch_row.size(); ++i)
     {
         Trajectory *pt = next_trajectory_pool[mismatch_row[i]];
         if (pt->state != Lost)
         {
             pt->mark_lost();
-            lost_trajectories.push_back(*pt); // Deep copy.
+            lost_trajectories.push_back(pt);
         }
     }
 
@@ -197,7 +194,6 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     
     cost = iou_distance(unconfirmed_trajectories, nnext_candidates);
     linear_assignment(cost, 0.7f, matches, mismatch_row, mismatch_col);
-    
     for (miter = matches.begin(); miter != matches.end(); miter++)
     {
         unconfirmed_trajectories[miter->first]->update(*nnext_candidates[miter->second], timestamp);
@@ -208,52 +204,64 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         std::chrono::high_resolution_clock::now() - start_lost_iou).count());
     auto start_left_work = std::chrono::high_resolution_clock::now();
 #endif
+    TrajectoryPtrPool removed_trajectories;
     for (size_t i = 0; i < mismatch_row.size(); ++i)
     {
         unconfirmed_trajectories[mismatch_row[i]]->mark_removed();
-        removed_trajectories.push_back(*unconfirmed_trajectories[mismatch_row[i]]); // Deep copy.
+        removed_trajectories.push_back(unconfirmed_trajectories[mismatch_row[i]]);
     }
     
     for (size_t i = 0; i < mismatch_col.size(); ++i)
     {
-        nnext_candidates[mismatch_col[i]]->activate(timestamp);
-        activated_trajectories.push_back(nnext_candidates[mismatch_col[i]]);
+        this->trajectories.push_back(*nnext_candidates[mismatch_col[i]]);
+        Trajectory *latest_traj = &this->trajectories.back();
+        latest_traj->activate(timestamp);
+        activated_trajectories.push_back(latest_traj);
     }
     
-    for (size_t i = 0; i < lost_trajectories.size(); ++i)
+    for (size_t i = 0; i < this->lost_trajectories.size(); ++i)
     {
-        Trajectory &lt = lost_trajectories[i];
-        if (timestamp - lt.timestamp > max_lost_time)
+        Trajectory *lt = this->lost_trajectories[i];
+        if (timestamp - lt->timestamp > max_lost_time)
         {
-            lt.mark_removed();
-            removed_trajectories.push_back(lt); // Deep copy.
+            lt->mark_removed();
+            removed_trajectories.push_back(lt);
         }
     }
 
-    this->tracked_trajectories += activated_trajectories;   // Deep copy.
-    this->tracked_trajectories += retrieved_trajectories;   // Deep copy.
-    TrajectoryPoolIterator piter;
+    TrajectoryPtrPoolIterator piter;
     for (piter = this->tracked_trajectories.begin(); piter != this->tracked_trajectories.end(); )
     {
-        if (piter->state != Tracked) {
+        if ((*piter)->state != Tracked)
             piter = this->tracked_trajectories.erase(piter);
-        }else
+        else
             ++piter;
     }
     
-    removed_trajectories -= this->tracked_trajectories;
-    lost_trajectories -= this->tracked_trajectories;
-    lost_trajectories -= removed_trajectories;
-    remove_duplicate_trajectory(this->tracked_trajectories, lost_trajectories);
-    
+    this->tracked_trajectories += activated_trajectories;
+    this->tracked_trajectories += retrieved_trajectories;
+    this->lost_trajectories -= this->tracked_trajectories;
+    this->lost_trajectories += lost_trajectories;
+    this->lost_trajectories -= removed_trajectories;
+    remove_duplicate_trajectory(this->tracked_trajectories, this->lost_trajectories);
+
+    std::list<Trajectory>::iterator iter;
+    for (iter = this->trajectories.begin(); iter != this->trajectories.end(); )
+    {
+        if (iter->state == Removed)
+            iter = this->trajectories.erase(iter);
+        else
+            ++iter;
+    }
+
     tracks.clear();
     for (size_t i = 0; i < this->tracked_trajectories.size(); ++i)
     {
-        if (this->tracked_trajectories[i].is_activated)
+        if (this->tracked_trajectories[i]->is_activated)
         {
             Track track = {
-                .id = this->tracked_trajectories[i].id,
-                .ltrb = this->tracked_trajectories[i].ltrb};
+                .id = this->tracked_trajectories[i]->id,
+                .ltrb = this->tracked_trajectories[i]->ltrb};
             tracks.push_back(track);
         }
     }
@@ -352,7 +360,7 @@ void JDETracker::linear_assignment(const cv::Mat &cost, float cost_limit, Match 
     }
 }
 
-void JDETracker::remove_duplicate_trajectory(TrajectoryPool &a, TrajectoryPool &b, float iou_thresh)
+void JDETracker::remove_duplicate_trajectory(TrajectoryPtrPool &a, TrajectoryPtrPool &b, float iou_thresh)
 {
     if (0 == a.size() || 0 == b.size())
         return;
@@ -366,8 +374,8 @@ void JDETracker::remove_duplicate_trajectory(TrajectoryPool &a, TrajectoryPool &
     std::vector<int> db;
     for (size_t i = 0; i < idx.size(); ++i)
     {
-        int ta = a[idx[i].y].timestamp - a[idx[i].y].starttime;
-        int tb = b[idx[i].x].timestamp - b[idx[i].x].starttime;
+        int ta = a[idx[i].y]->timestamp - a[idx[i].y]->starttime;
+        int tb = b[idx[i].x]->timestamp - b[idx[i].x]->starttime;
         if (ta > tb)
             db.push_back(idx[i].x);
         else
@@ -375,7 +383,7 @@ void JDETracker::remove_duplicate_trajectory(TrajectoryPool &a, TrajectoryPool &
     }
     
     int id = 0;
-    TrajectoryPoolIterator piter;
+    TrajectoryPtrPoolIterator piter;
     for (piter = a.begin(); piter != a.end(); )
     {
         std::vector<int>::iterator iter = find(da.begin(), da.end(), id++);

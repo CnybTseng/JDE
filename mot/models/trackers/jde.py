@@ -17,8 +17,8 @@ class JDE(nn.Module):
         self.neck = build_neck(config.NECK)
         self.head = build_head(config.HEAD)
     
-    def forward(self, input):
+    def forward(self, input, *args, **kwargs):
         """JDE forward"""
         for module in self.children():
-            input = module(input)
+            input = module(input, *args, **kwargs)
         return input

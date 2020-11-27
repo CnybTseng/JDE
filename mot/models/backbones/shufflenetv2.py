@@ -1,7 +1,9 @@
 import torch
 from torch import nn
+from mot.models.builder import BLOCKS
 from mot.models.builder import BACKBONES
 
+@BLOCKS.register_module()
 class ShuffleNetV2BuildBlock(nn.Module):
     '''ShuffleNetV2 building block. Currently only support half
        splitting when channel shuffling.
@@ -22,6 +24,8 @@ class ShuffleNetV2BuildBlock(nn.Module):
             raise ValueError('when stride is 1, the input and output'
                 ' channels must be equal')
         
+        self.block_in_channels = block_in_channels
+        self.block_out_channels = block_out_channels
         self.stride = stride
         out_channels = block_out_channels // 2
         in_channels = block_in_channels if stride == 2 else out_channels
@@ -67,6 +71,14 @@ class ShuffleNetV2BuildBlock(nn.Module):
         input = input.permute(1, 0, 2)
         input = input.reshape(2, -1, c // 2, h, w)
         return input[0], input[1]
+    
+    @property
+    def in_channels(self):
+        return self.block_in_channels
+    
+    @property
+    def out_channels(self):
+        return self.block_out_channels
 
 @BACKBONES.register_module()
 class ShuffleNetV2(nn.Module):
@@ -127,7 +139,7 @@ class ShuffleNetV2(nn.Module):
         if pretrained:
             self._load_pretrained_model(pretrained)
         
-    def forward(self, input):
+    def forward(self, input, *args, **kwargs):
         """ShuffleNetV2 forward"""
         outputs = []
         for name, module in self.named_children():

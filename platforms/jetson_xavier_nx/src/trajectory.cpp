@@ -127,11 +127,11 @@ void Trajectory::reactivate(Trajectory &traj, int timestamp_, bool newid)
 
 void Trajectory::update_embedding(const cv::Mat &embedding)
 {
-    current_embedding = embedding; // / cv::norm(embedding);
+    current_embedding = embedding/*; //*/ / cv::norm(embedding);
     if (smooth_embedding.empty())
     {
         smooth_embedding = current_embedding;
-        return;
+        // return;
     }
     else
     {
@@ -205,6 +205,48 @@ TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPtrPool &b)
     return a;
 }
 
+TrajectoryPool &operator+=(TrajectoryPool &a, const TrajectoryPool &b)
+{    
+    std::vector<int> ids(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+        ids[i] = a[i].id;
+    
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        if (b[i].smooth_embedding.empty())
+            continue;
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), b[i].id);
+        if (iter == ids.end())
+        {
+            a.push_back(b[i]);
+            ids.push_back(b[i].id);
+        }
+    }
+    
+    return a;
+}
+
+TrajectoryPtrPool &operator+=(TrajectoryPtrPool &a, const TrajectoryPtrPool &b)
+{    
+    std::vector<int> ids(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+        ids[i] = a[i]->id;
+    
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        if (b[i]->smooth_embedding.empty())
+            continue;
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), b[i]->id);
+        if (iter == ids.end())
+        {
+            a.push_back(b[i]);
+            ids.push_back(b[i]->id);
+        }
+    }
+    
+    return a;
+}
+
 TrajectoryPool operator-(const TrajectoryPool &a, const TrajectoryPool &b)
 {
     TrajectoryPool dif;
@@ -251,6 +293,25 @@ TrajectoryPool &operator-=(TrajectoryPool &a, const TrajectoryPtrPool &b)
     for (piter = a.begin(); piter != a.end(); )
     {
         std::vector<int>::iterator iter = find(ids.begin(), ids.end(), piter->id);
+        if (iter == ids.end())
+            ++piter;
+        else
+            piter = a.erase(piter);
+    }
+    
+    return a;
+}
+
+TrajectoryPtrPool &operator-=(TrajectoryPtrPool &a, const TrajectoryPtrPool &b)
+{
+    std::vector<int> ids(b.size());
+    for (size_t i = 0; i < b.size(); ++i)
+        ids[i] = b[i]->id;
+    
+    TrajectoryPtrPoolIterator piter;
+    for (piter = a.begin(); piter != a.end(); )
+    {
+        std::vector<int>::iterator iter = find(ids.begin(), ids.end(), (*piter)->id);
         if (iter == ids.end())
             ++piter;
         else
@@ -561,6 +622,23 @@ cv::Mat iou_distance(const TrajectoryPtrPool &a, const TrajectoryPool &b)
     }
     
     return dists;
+}
+
+std::ostream& operator<<(std::ostream& os, Trajectory& trajectory)
+{
+    os << "state: " << trajectory.state << std::endl;
+    os << "ltrb: " << trajectory.ltrb << std::endl;
+    os << "smooth_embedding: " << trajectory.smooth_embedding << std::endl;
+    os << "id: " << trajectory.id << std::endl;
+    os << "is_activated: " << trajectory.is_activated << std::endl;
+    os << "timestamp: " << trajectory.timestamp << std::endl;
+    os << "starttime: " << trajectory.starttime << std::endl;
+    os << "xyah: " << trajectory.xyah << std::endl;
+    os << "score: " << trajectory.score << std::endl;
+    os << "current_embedding: " << trajectory.current_embedding << std::endl;
+    os << "eta: " << trajectory.eta << std::endl;
+    os << "length: " << trajectory.length << std::endl;
+    return os;
 }
 
 }   // namespace mot

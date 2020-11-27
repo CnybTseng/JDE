@@ -1,5 +1,5 @@
 from torch import nn
-from mot.models.utils import Registry, build_from_config
+from mot.utils import Registry, build_from_config
 
 BACKBONES = Registry('backbones')
 NECKS = Registry('necks')

@@ -80,7 +80,7 @@ class Registry:
         
         if module_class is not None:
             self._register_module(module_class, module_name, force)
-            return module
+            return module_class
         
         def _register(_module_class):
             self._register_module(_module_class, module_name, force)

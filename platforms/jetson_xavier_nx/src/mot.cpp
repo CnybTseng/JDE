@@ -4,6 +4,7 @@
 #include <thread>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <opencv2/opencv.hpp>
 #include <cuda_runtime_api.h>
 
@@ -15,6 +16,26 @@
 #include "jdetracker.h"
 
 namespace mot {
+
+static void letterbox_image(const cv::Mat& in, cv::Mat& out)
+{
+    assert(!in.empty());
+    assert(!out.empty());
+    
+    float h = in.rows;
+    float w = in.cols;
+    cv::Size out_size = out.size();
+    float s = std::min<float>(out_size.height / h, out_size.width / w);
+    int nh = round(s * h);
+    int nw = round(s * w);
+    float dx = (out_size.width - nw) / 2.f;
+    float dy = (out_size.height - nh) / 2.f;
+    int left  = round(dx - 0.1f);
+    int right = round(dx + 0.1f);
+    int above = round(dy - 0.1f);
+    int below = round(dy + 0.1f);
+    cv::resize(in, out(cv::Rect(left, above, nw, nh)), cv::Size(nw, nh), cv::INTER_AREA);
+}
 
 static void correct_bbox(float *ltrb, int imw, int imh, int niw, int nih)
 {
@@ -129,6 +150,7 @@ int load_mot_model(const char *cfg_path)
     // Allocate algorithm usage buffers.
     model.indims = model.jde->get_binding_dims(0);
     model.rszim_hwc = std::shared_ptr<unsigned char>(new unsigned char[model.indims.numel()]);
+    memset(model.rszim_hwc.get(), 128, model.indims.numel());
     model.rszim_chw = std::shared_ptr<unsigned char>(new unsigned char[model.indims.numel()]);
     model.in = std::shared_ptr<float>(new float[model.indims.numel()]);
     
@@ -187,7 +209,8 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
     // Resize the image to the neural network input size.
     cv::Mat src(height, width, CV_8UC3, const_cast<unsigned char*>(data));
     cv::Mat rszim_hwc(model.indims.d[2], model.indims.d[3], CV_8UC3, model.rszim_hwc.get());
-    cv::resize(src, rszim_hwc, cv::Size(model.indims.d[3], model.indims.d[2]));
+    // cv::resize(src, rszim_hwc, cv::Size(model.indims.d[3], model.indims.d[2]));
+    letterbox_image(src, rszim_hwc);
 
     // Convert HWC to CHW and swap the red and blue channel if necessary.
     unsigned char* pchannel = model.rszim_chw.get();

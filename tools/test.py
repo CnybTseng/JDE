@@ -22,18 +22,12 @@ def main():
     print(config)
     
     model = build_tracker(config.MODEL)
+    model.eval()
     print(model)
     
     input = torch.rand(64, 3, 320, 576)
-    target = torch.rand(1000, 7)
-    target[:, 0] = torch.randint(0, 64, (1000,))     # Image index
-    target[:, 1] = 0                        # Class index
-    target[:, 2] = torch.randint(0, 100, (1000,))    # Trajectory index
-    loss, metrics = model(input, target, [320, 576])
-    print('loss: {}'.format(loss))
-    print('metrics:')
-    for k, v in metrics.items():
-        print('{}: {}'.format(k, v))
+    output = model(input)
+    print('output size: {}'.format(output.size()))
     
 if __name__ == '__main__':
     main()

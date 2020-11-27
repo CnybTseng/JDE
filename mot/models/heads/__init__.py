@@ -1,1 +1,1 @@
-from .jde import JDELoss
+from .jde import JDEHead

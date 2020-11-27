@@ -9,7 +9,7 @@ from torchvision.transforms import transforms as T
 def record_error_box(box, width, height, img_path):
     minx, maxx = box[:, [0, 2]].min(), box[:, [0, 2]].max()
     miny, maxy = box[:, [1, 3]].min(), box[:, [1, 3]].max()
-    if minx < 0 or maxx >= width or miny < 0 or maxy >= height:
+    if minx < 0 or minx >= maxx or maxx >= width or miny < 0 or miny >= maxy or maxy >= height:
         with open('./error_box.txt', 'a') as file:
             file.write('{} {} {} {} {} {} {}\n'.format(img_path, minx, maxx, miny, maxy, width, height))
             file.close()
@@ -74,6 +74,8 @@ class LoadImagesAndLabels:  # for training
             labels[:, 3] = np.clip(ratio * h * (labels0[:, 3] - labels0[:, 5] / 2) + padh, 0, height - 1)
             labels[:, 4] = np.clip(ratio * w * (labels0[:, 2] + labels0[:, 4] / 2) + padw, 0, width - 1)
             labels[:, 5] = np.clip(ratio * h * (labels0[:, 3] + labels0[:, 5] / 2) + padh, 0, height - 1)
+            mask = (labels[:, 2] + 16 < labels[:, 4]) & (labels[:, 3] + 16 < labels[:, 5])
+            labels = labels[mask]
         else:
             labels = np.array([])
 

@@ -28,7 +28,7 @@ link_directories(
 
 add_definitions(-std=c++11 -O3)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fopenmp")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -fopenmp -g")
 
 file(GLOB_RECURSE libsrcs src/*.cpp)
 list(FILTER libsrcs EXCLUDE REGEX "mot-test")
@@ -81,9 +81,11 @@ add_dependencies(mot-test mot)
 target_link_libraries(
     mot-test
     -lmot
+    -lx264
     -lpthread
     -lopencv_core
     -lopencv_video
+    -lopencv_videoio
     -lopencv_imgcodecs
     -lopencv_imgproc
 )
