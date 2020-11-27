@@ -41,6 +41,7 @@ python tracker.py --img-path /data/tseng/dataset/jde/MOT16/test/MOT16-03/img1 \ 
 # 3. 和原始版本的JDE的性能对比(MOT16 train)
 
 # 3.1 darknet based JDE
+
          |MOTA  |MOTP  |IDF1  |IDP   |IDR   |Rcll  |Prcn  |TP    |FP   |FN    |MTR   |PTR   |MLR   |MT  |PT  |ML |FAR  |FM   |FMR   |IDSW |IDSWR
 ---------|------|------|------|------|------|------|------|------|-----|------|------|------|------|----|----|---|-----|-----|------|-----|-----
 MOT16-02 |44.81 |76.14 |43.28 |54.39 |35.94 |56.04 |84.80 | 9993 |1791 | 7840 |24.07 |57.41 |18.52 | 13 | 31 |10 |2.98 | 423 | 7.55 | 211 | 3.8
