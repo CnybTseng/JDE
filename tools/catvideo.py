@@ -29,6 +29,6 @@ while True:
     cv2.imwrite(os.path.join(args.cache_dir, '%06d.jpg' % i), im)
     i += 1
 
-os.system('ffmpeg -i {} {}.mp4 -y'.format(os.path.join(args.cache_dir, '%06d.jpg'),
+os.system('ffmpeg -f image2 -i {} {}.mp4 -y'.format(os.path.join(args.cache_dir, '%06d.jpg'),
     os.path.join(args.cache_dir, 'cat')))
     

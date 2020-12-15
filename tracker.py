@@ -624,7 +624,7 @@ def main(args):
         segments = re.split(r'[\\, /]', path)
         cv2.imwrite(os.path.join(imgpath, segments[-1]), result)
 
-    os.system('ffmpeg -i {} {}.mp4 -y'.format(os.path.join(imgpath, '%06d.jpg'),
+    os.system('ffmpeg -f image2 -i {} {}.mp4 -y'.format(os.path.join(imgpath, '%06d.jpg'),
         os.path.join(args.workspace, 'result', strs[-3])))
 
 if __name__ == '__main__':

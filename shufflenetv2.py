@@ -11,6 +11,7 @@ import torch.nn.functional as F
 
 import jde
 import iou
+import focalloss
 
 class ShuffleNetV2Block(torch.nn.Module):
     def __init__(self, in_channels, out_channels, mid_channels, kernel_size, stride):
@@ -55,7 +56,7 @@ class ShuffleNetV2Block(torch.nn.Module):
 
 class ShuffleNetV2(torch.nn.Module):
     def __init__(self, anchors=None, num_classes=1, num_ids=0, model_size='0.5x',
-        box_loss='smoothl1loss'):
+        box_loss='smoothl1loss', cls_loss='crossentropyloss'):
         super(ShuffleNetV2, self).__init__()
         self.anchors = anchors
         self.num_classes = num_classes
@@ -65,11 +66,11 @@ class ShuffleNetV2(torch.nn.Module):
         if model_size == '0.5x':
             self.stage_out_channels = [-1, 24,  48,  96, 192, 128, 128, 128]
         elif model_size == '1.0x':
-            self.stage_out_channels = [-1, 24, 116, 232, 464, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 116, 232, 464, 128, 128, 128]
         elif model_size == '1.5x':
-            self.stage_out_channels = [-1, 24, 176, 352, 704, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 176, 352, 704, 128, 128, 128]
         elif model_size == '2.0x':
-            self.stage_out_channels = [-1, 24, 244, 488, 976, 512, 256, 128]
+            self.stage_out_channels = [-1, 24, 244, 488, 976, 128, 128, 128]
         else:
             raise NotImplementedError
         
@@ -196,7 +197,8 @@ class ShuffleNetV2(torch.nn.Module):
         
         self.classifier = torch.nn.Linear(self.embedding_channels, num_ids) if num_ids > 0 else torch.nn.Sequential()
         box_loss = iou.DIOULoss() if box_loss == 'diouloss' else torch.nn.SmoothL1Loss()
-        self.criterion = jde.JDELoss(num_ids, embd_dim=self.embedding_channels, box_loss=box_loss)  if num_ids > 0 else torch.nn.Sequential()
+        cls_loss = focalloss.SoftmaxFocalLoss(ignore_index=-1) if cls_loss == 'softmaxfocalloss' else None
+        self.criterion = jde.JDELoss(num_ids, embd_dim=self.embedding_channels, box_loss=box_loss, cls_loss=cls_loss)  if num_ids > 0 else torch.nn.Sequential()
         
         self.__init_weights()
         

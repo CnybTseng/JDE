@@ -86,6 +86,8 @@ def parse_args():
         nargs='+', help='lr coeff [1,1,50] for backbone, detection, and identity')
     parser.add_argument('--box-loss', type=str, default='smoothl1loss',
         help='box regression loss, it can be smoothl1loss (default) or diouloss')
+    parser.add_argument('--cls-loss', type=str, default='crossentropyloss',
+        help='object classification loss, crossentropyloss or softmaxfocalloss')
     args = parser.parse_args()
     return args
 
@@ -146,7 +148,8 @@ def train(args):
             num_ids=num_ids).to(device)
     elif args.backbone == 'shufflenetv2':
         model = shufflenetv2.ShuffleNetV2(anchors, num_classes=args.num_classes,
-            num_ids=num_ids, model_size=args.thin, box_loss=args.box_loss).to(device)
+            num_ids=num_ids, model_size=args.thin, box_loss=args.box_loss,
+            cls_loss=args.cls_loss).to(device)
     else:
         print('unknown backbone architecture!')
         sys.exit(0)

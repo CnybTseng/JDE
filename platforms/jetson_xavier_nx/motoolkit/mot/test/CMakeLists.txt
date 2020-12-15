@@ -1,0 +1,150 @@
+link_directories(${CMAKE_CURRENT_BINARY_DIR}/../src)
+
+add_executable(jde-test jde-test.cpp ${libsrcs})
+add_dependencies(jde-test motplugin)
+target_link_libraries(
+    jde-test
+    libopencv_video.a
+    libopencv_imgproc.a
+    libopencv_core.a
+    libade.a
+    libIlmImf.a
+    libittnotify.a
+    liblibopenjp2.a
+    liblibprotobuf.a
+    liblibwebp.a
+    libquirc.a
+    libtegra_hal.a
+    libmotplugin.a
+    -lnvinfer
+    -lnvonnxparser
+    -lcudart
+    -lcublas
+    -lcudnn
+    -lpthread
+    -ldl
+    -lz
+)
+
+add_executable(mot-test mot-test.cpp)
+add_dependencies(mot-test mot)
+target_link_libraries(
+    mot-test
+    libopencv_video.a
+    libopencv_videoio.a
+    libopencv_imgcodecs.a
+    libopencv_imgproc.a
+    libopencv_core.a
+    libade.a
+    libIlmImf.a
+    libittnotify.a
+    liblibopenjp2.a
+    liblibprotobuf.a
+    liblibwebp.a
+    libquirc.a
+    libtegra_hal.a
+    -lmot
+    -lx264
+    -lpthread
+    -ldl
+    -lpng
+    -lz
+    -lgstreamer-1.0
+    -lgobject-2.0
+    -lgstsdp-1.0
+    -lglib-2.0
+    -ldc1394
+    -ljpeg
+    -lpng
+    -lpng16
+    -ltiff
+    -lgstapp
+    -lgstapp-1.0
+    -lgstriff-1.0
+    -lgstencoding
+    -lgstpbutils-1.0
+)
+
+add_executable(jdecoderv2-test jdecoderv2-test.cpp)
+add_dependencies(jdecoderv2-test motplugin)
+target_link_libraries(
+    jdecoderv2-test
+    libopencv_video.a
+    libopencv_imgcodecs.a
+    libopencv_imgproc.a
+    libopencv_core.a
+    libade.a
+    libIlmImf.a
+    libittnotify.a
+    liblibopenjp2.a
+    liblibprotobuf.a
+    liblibwebp.a
+    libquirc.a
+    libtegra_hal.a
+    libmotplugin.a
+    -lnvinfer
+    -lnvonnxparser
+    -lcudart
+    -lcublas
+    -lcudnn
+    -lpthread
+    -ldl
+    -lz
+    -lgstreamer-1.0
+    -lgobject-2.0
+    -lgstsdp-1.0
+    -lglib-2.0
+    -ldc1394
+    -ljpeg
+    -lpng
+    -lpng16
+    -ltiff
+    -lgstapp
+    -lgstapp-1.0
+    -lgstriff-1.0
+    -lgstencoding
+    -lgstpbutils-1.0
+)
+
+add_executable(preprocess-test preprocess-test.cpp ../src/utils.cpp)
+target_link_libraries(
+    preprocess-test
+    libopencv_video.a
+    libopencv_imgcodecs.a
+    libopencv_imgproc.a
+    libopencv_core.a
+    libade.a
+    libIlmImf.a
+    libittnotify.a
+    liblibopenjp2.a
+    liblibprotobuf.a
+    liblibwebp.a
+    libquirc.a
+    libtegra_hal.a
+    -lnvinfer
+    -lnvonnxparser
+    -lcudart
+    -lcublas
+    -lcudnn
+    -lpthread
+    -ldl
+    -lz
+    -lgstreamer-1.0
+    -lgobject-2.0
+    -lgstsdp-1.0
+    -lglib-2.0
+    -ldc1394
+    -ljpeg
+    -lpng
+    -lpng16
+    -ltiff
+    -lgstapp
+    -lgstapp-1.0
+    -lgstriff-1.0
+    -lgstencoding
+    -lgstpbutils-1.0
+)
+
+install(TARGETS jde-test mot-test jdecoderv2-test preprocess-test
+    RUNTIME DESTINATION bin
+)

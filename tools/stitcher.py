@@ -63,7 +63,7 @@ if __name__ == '__main__':
     stitcher = Stitcher()
     for i in range(16):
         image = torch.rand(64, 3, 320, 576)
-        n = torch.randint(0, 500, (1,)).item()
+        n = torch.randint(0, 2, (1,)).item()
         target = torch.rand((n, 7))
         batch = stitcher([image, target])
         print('target: {}'.format(target.size()))

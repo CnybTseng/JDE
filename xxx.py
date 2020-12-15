@@ -70,12 +70,10 @@ class LoadImagesAndLabels:  # for training
 
             # Normalized xywh to pixel xyxy format
             labels = labels0.copy()
-            labels[:, 2] = np.clip(ratio * w * (labels0[:, 2] - labels0[:, 4] / 2) + padw, 0, width - 1)
-            labels[:, 3] = np.clip(ratio * h * (labels0[:, 3] - labels0[:, 5] / 2) + padh, 0, height - 1)
-            labels[:, 4] = np.clip(ratio * w * (labels0[:, 2] + labels0[:, 4] / 2) + padw, 0, width - 1)
-            labels[:, 5] = np.clip(ratio * h * (labels0[:, 3] + labels0[:, 5] / 2) + padh, 0, height - 1)
-            mask = (labels[:, 2] + 16 < labels[:, 4]) & (labels[:, 3] + 16 < labels[:, 5])
-            labels = labels[mask]
+            labels[:, 2] = ratio * w * (labels0[:, 2] - labels0[:, 4] / 2) + padw
+            labels[:, 3] = ratio * h * (labels0[:, 3] - labels0[:, 5] / 2) + padh
+            labels[:, 4] = ratio * w * (labels0[:, 2] + labels0[:, 4] / 2) + padw
+            labels[:, 5] = ratio * h * (labels0[:, 3] + labels0[:, 5] / 2) + padh
         else:
             labels = np.array([])
 
@@ -193,10 +191,10 @@ def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scal
             xy = np.concatenate((x - w / 2, y - h / 2, x + w / 2, y + h / 2)).reshape(4, n).T
 
             # reject warped points outside of image
-            np.clip(xy[:, 0], 0, width - 1, out=xy[:, 0])
-            np.clip(xy[:, 2], 0, width - 1, out=xy[:, 2])
-            np.clip(xy[:, 1], 0, height - 1, out=xy[:, 1])
-            np.clip(xy[:, 3], 0, height - 1, out=xy[:, 3])
+            np.clip(xy[:, 0], 0, width, out=xy[:, 0])
+            np.clip(xy[:, 2], 0, width, out=xy[:, 2])
+            np.clip(xy[:, 1], 0, height, out=xy[:, 1])
+            np.clip(xy[:, 3], 0, height, out=xy[:, 3])
             w = xy[:, 2] - xy[:, 0]
             h = xy[:, 3] - xy[:, 1]
             area = w * h
