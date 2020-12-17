@@ -19,6 +19,7 @@
 #include "jde.h"
 #include "chunk.h"
 #include "utils.h"
+#include "config.h"
 #include "logger.h"
 #include "jdecoderv2.h"
 
@@ -221,31 +222,37 @@ bool JDE::create_network_from_scratch(void)
     std::cout << "maxpool: " << mpool->getOutput(0)->getDimensions() << std::endl;
     
     // stage2
+    int in_channels = arch["stage2"].first;
+    int out_channels = arch["stage2"].second;
     nvinfer1::ILayer* layer = nullptr, *stag2 = nullptr;
-    layer = addShuffleNetV2Block(network.get(), *mpool->getOutput(0), 24, 48, 2, weights, "stage2.0");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 48, 1, weights, "stage2.1");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 48, 1, weights, "stage2.2");
-    stag2 = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 48, 1, weights, "stage2.3");
+    layer = addShuffleNetV2Block(network.get(), *mpool->getOutput(0), 24, out_channels, 2, weights, "stage2.0");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage2.1");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage2.2");
+    stag2 = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage2.3");
     std::cout << "stage2: " << stag2->getOutput(0)->getDimensions() << std::endl;
     
     // stage3
+    in_channels = arch["stage3"].first;
+    out_channels = arch["stage3"].second;
     nvinfer1::ILayer* stag3 = nullptr;
-    layer = addShuffleNetV2Block(network.get(), *stag2->getOutput(0), 48, 96, 2, weights, "stage3.0");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.1");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.2");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.3");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.4");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.5");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.6");
-    stag3 = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 48, 96, 1, weights, "stage3.7");
+    layer = addShuffleNetV2Block(network.get(), *stag2->getOutput(0), in_channels, out_channels, 2, weights, "stage3.0");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.1");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.2");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.3");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.4");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.5");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.6");
+    stag3 = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage3.7");
     std::cout << "stage3: " << stag3->getOutput(0)->getDimensions() << std::endl;
     
     // stage4
+    in_channels = arch["stage4"].first;
+    out_channels = arch["stage4"].second;
     nvinfer1::ILayer* stag4 = nullptr;
-    layer = addShuffleNetV2Block(network.get(), *stag3->getOutput(0), 96,  192, 2, weights, "stage4.0");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 192, 192, 1, weights, "stage4.1");
-    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 192, 192, 1, weights, "stage4.2");
-    stag4 = addShuffleNetV2Block(network.get(), *layer->getOutput(0), 192, 192, 1, weights, "stage4.3");
+    layer = addShuffleNetV2Block(network.get(), *stag3->getOutput(0), in_channels, out_channels, 2, weights, "stage4.0");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage4.1");
+    layer = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage4.2");
+    stag4 = addShuffleNetV2Block(network.get(), *layer->getOutput(0), in_channels, out_channels, 1, weights, "stage4.3");
     std::cout << "stage4: " << stag4->getOutput(0)->getDimensions() << std::endl;
 #if (!RUN_BACKBONE_ONLY)
     // Task head1: 192->128
@@ -258,18 +265,18 @@ bool JDE::create_network_from_scratch(void)
     std::cout << "conv5: " << relu5->getOutput(0)->getDimensions() << std::endl;
     
     nvinfer1::ILayer* shbk6 = nullptr;
-    shbk6 = addShuffleNetV2Block(network.get(), *relu5->getOutput(0), 128, 128, 1, weights, "shbk6.0");
-    shbk6 = addShuffleNetV2Block(network.get(), *shbk6->getOutput(0), 128, 128, 1, weights, "shbk6.1");
-    shbk6 = addShuffleNetV2Block(network.get(), *shbk6->getOutput(0), 128, 128, 1, weights, "shbk6.2");
+    shbk6 = addShuffleNetV2Block(network.get(), *relu5->getOutput(0), 64, 128, 1, weights, "shbk6.0");
+    shbk6 = addShuffleNetV2Block(network.get(), *shbk6->getOutput(0), 64, 128, 1, weights, "shbk6.1");
+    shbk6 = addShuffleNetV2Block(network.get(), *shbk6->getOutput(0), 64, 128, 1, weights, "shbk6.2");
     auto conv7 = network->addConvolutionNd(*shbk6->getOutput(0), 24, nvinfer1::Dims{2,{3,3},{}},
         weights["conv7.weight"], weights["conv7.bias"]);
     conv7->setPaddingNd(nvinfer1::Dims2{1,1});
     conv7->setName("conv7");
     
     nvinfer1::ILayer* shbk8 = nullptr;
-    shbk8 = addShuffleNetV2Block(network.get(), *relu5->getOutput(0), 128, 128, 1, weights, "shbk8.0");
-    shbk8 = addShuffleNetV2Block(network.get(), *shbk8->getOutput(0), 128, 128, 1, weights, "shbk8.1");
-    shbk8 = addShuffleNetV2Block(network.get(), *shbk8->getOutput(0), 128, 128, 1, weights, "shbk8.2");
+    shbk8 = addShuffleNetV2Block(network.get(), *relu5->getOutput(0), 64, 128, 1, weights, "shbk8.0");
+    shbk8 = addShuffleNetV2Block(network.get(), *shbk8->getOutput(0), 64, 128, 1, weights, "shbk8.1");
+    shbk8 = addShuffleNetV2Block(network.get(), *shbk8->getOutput(0), 64, 128, 1, weights, "shbk8.2");
     auto conv9 = network->addConvolutionNd(*shbk8->getOutput(0), 128, nvinfer1::Dims{2,{3,3},{}},
         weights["conv9.weight"], weights["conv9.bias"]);
     conv9->setPaddingNd(nvinfer1::Dims2{1,1});
@@ -299,10 +306,11 @@ bool JDE::create_network_from_scratch(void)
     auto relu10 = network->addActivation(*bnom10->getOutput(0), nvinfer1::ActivationType::kRELU);
 #else   // USE_STANDARD_CONVOLUTION_IN_NECK
     // Depthwise
-    auto conv10_dw = network->addConvolutionNd(*conc10->getOutput(0), 224, nvinfer1::Dims{2,{3,3},{}},
+    out_channels = conc10->getOutput(0)->getDimensions().d[1];
+    auto conv10_dw = network->addConvolutionNd(*conc10->getOutput(0), out_channels, nvinfer1::Dims{2,{3,3},{}},
         weights["conv10.0.weight"], zero_b);
     conv10_dw->setPaddingNd(nvinfer1::Dims2{1,1});
-    conv10_dw->setNbGroups(224);
+    conv10_dw->setNbGroups(out_channels);
     conv10_dw->setName("conv10_dw");
     auto bnom10_dw = addBatchnorm2d(network.get(), *conv10_dw->getOutput(0), weights["conv10.1.weight"],
         weights["conv10.1.bias"], weights["conv10.1.running_mean"], weights["conv10.1.running_var"]);
@@ -317,18 +325,18 @@ bool JDE::create_network_from_scratch(void)
     std::cout << "conv10: " << relu10->getOutput(0)->getDimensions() << std::endl;
     
     nvinfer1::ILayer* shbk11 = nullptr;
-    shbk11 = addShuffleNetV2Block(network.get(), *relu10->getOutput(0), 128, 128, 1, weights, "shbk11.0");
-    shbk11 = addShuffleNetV2Block(network.get(), *shbk11->getOutput(0), 128, 128, 1, weights, "shbk11.1");
-    shbk11 = addShuffleNetV2Block(network.get(), *shbk11->getOutput(0), 128, 128, 1, weights, "shbk11.2");
+    shbk11 = addShuffleNetV2Block(network.get(), *relu10->getOutput(0), 64, 128, 1, weights, "shbk11.0");
+    shbk11 = addShuffleNetV2Block(network.get(), *shbk11->getOutput(0), 64, 128, 1, weights, "shbk11.1");
+    shbk11 = addShuffleNetV2Block(network.get(), *shbk11->getOutput(0), 64, 128, 1, weights, "shbk11.2");
     auto conv12 = network->addConvolutionNd(*shbk11->getOutput(0), 24, nvinfer1::Dims{2,{3,3},{}},
         weights["conv12.weight"], weights["conv12.bias"]);
     conv12->setPaddingNd(nvinfer1::Dims2{1,1});
     conv12->setName("conv12");
 
     nvinfer1::ILayer* shbk13 = nullptr;
-    shbk13 = addShuffleNetV2Block(network.get(), *relu10->getOutput(0), 128, 128, 1, weights, "shbk13.0");
-    shbk13 = addShuffleNetV2Block(network.get(), *shbk13->getOutput(0), 128, 128, 1, weights, "shbk13.1");
-    shbk13 = addShuffleNetV2Block(network.get(), *shbk13->getOutput(0), 128, 128, 1, weights, "shbk13.2");
+    shbk13 = addShuffleNetV2Block(network.get(), *relu10->getOutput(0), 64, 128, 1, weights, "shbk13.0");
+    shbk13 = addShuffleNetV2Block(network.get(), *shbk13->getOutput(0), 64, 128, 1, weights, "shbk13.1");
+    shbk13 = addShuffleNetV2Block(network.get(), *shbk13->getOutput(0), 64, 128, 1, weights, "shbk13.2");
     auto conv14 = network->addConvolutionNd(*shbk13->getOutput(0), 128, nvinfer1::Dims{2,{3,3},{}},
         weights["conv14.weight"], weights["conv14.bias"]);
     conv14->setPaddingNd(nvinfer1::Dims2{1,1});
@@ -357,10 +365,11 @@ bool JDE::create_network_from_scratch(void)
     auto relu15 = network->addActivation(*bnom15->getOutput(0), nvinfer1::ActivationType::kRELU);
 #else   // USE_STANDARD_CONVOLUTION_IN_NECK
     // Depthwise
-    auto conv15_dw = network->addConvolutionNd(*conc15->getOutput(0), 176, nvinfer1::Dims{2,{3,3},{}},
+    out_channels = conc15->getOutput(0)->getDimensions().d[1];
+    auto conv15_dw = network->addConvolutionNd(*conc15->getOutput(0), out_channels, nvinfer1::Dims{2,{3,3},{}},
         weights["conv15.0.weight"], zero_b);
     conv15_dw->setPaddingNd(nvinfer1::Dims2{1,1});
-    conv15_dw->setNbGroups(176);
+    conv15_dw->setNbGroups(out_channels);
     conv15_dw->setName("conv15_dw");
     auto bnom15_dw = addBatchnorm2d(network.get(), *conv15_dw->getOutput(0), weights["conv15.1.weight"],
         weights["conv15.1.bias"], weights["conv15.1.running_mean"], weights["conv15.1.running_var"]);
@@ -375,18 +384,18 @@ bool JDE::create_network_from_scratch(void)
     std::cout << "conv15: " << relu15->getOutput(0)->getDimensions() << std::endl;
     
     nvinfer1::ILayer* shbk16 = nullptr;
-    shbk16 = addShuffleNetV2Block(network.get(), *relu15->getOutput(0), 128, 128, 1, weights, "shbk16.0");
-    shbk16 = addShuffleNetV2Block(network.get(), *shbk16->getOutput(0), 128, 128, 1, weights, "shbk16.1");
-    shbk16 = addShuffleNetV2Block(network.get(), *shbk16->getOutput(0), 128, 128, 1, weights, "shbk16.2");
+    shbk16 = addShuffleNetV2Block(network.get(), *relu15->getOutput(0), 64, 128, 1, weights, "shbk16.0");
+    shbk16 = addShuffleNetV2Block(network.get(), *shbk16->getOutput(0), 64, 128, 1, weights, "shbk16.1");
+    shbk16 = addShuffleNetV2Block(network.get(), *shbk16->getOutput(0), 64, 128, 1, weights, "shbk16.2");
     auto conv17 = network->addConvolutionNd(*shbk16->getOutput(0), 24, nvinfer1::Dims{2,{3,3},{}},
         weights["conv17.weight"], weights["conv17.bias"]);
     conv17->setPaddingNd(nvinfer1::Dims2{1,1});
     conv17->setName("conv17");
     
     nvinfer1::ILayer* shbk18 = nullptr;
-    shbk18 = addShuffleNetV2Block(network.get(), *relu15->getOutput(0), 128, 128, 1, weights, "shbk18.0");
-    shbk18 = addShuffleNetV2Block(network.get(), *shbk18->getOutput(0), 128, 128, 1, weights, "shbk18.1");
-    shbk18 = addShuffleNetV2Block(network.get(), *shbk18->getOutput(0), 128, 128, 1, weights, "shbk18.2");
+    shbk18 = addShuffleNetV2Block(network.get(), *relu15->getOutput(0), 64, 128, 1, weights, "shbk18.0");
+    shbk18 = addShuffleNetV2Block(network.get(), *shbk18->getOutput(0), 64, 128, 1, weights, "shbk18.1");
+    shbk18 = addShuffleNetV2Block(network.get(), *shbk18->getOutput(0), 64, 128, 1, weights, "shbk18.2");
     auto conv19 = network->addConvolutionNd(*shbk18->getOutput(0), 128, nvinfer1::Dims{2,{3,3},{}},
         weights["conv19.weight"], weights["conv19.bias"]);
     conv19->setPaddingNd(nvinfer1::Dims2{1,1});
@@ -624,7 +633,7 @@ nvinfer1::ILayer* addShuffleNetV2Block(
             weights[layer_name + ".minor_branch.1.bias"],
             weights[layer_name + ".minor_branch.1.running_mean"],
             weights[layer_name + ".minor_branch.1.running_var"]);
-        auto conv2 = network->addConvolutionNd(*bnom1->getOutput(0), mid_channels, nvinfer1::Dims{2,{1,1},{}},
+        auto conv2 = network->addConvolutionNd(*bnom1->getOutput(0), in_channels, nvinfer1::Dims{2,{1,1},{}},
             weights[layer_name + ".minor_branch.2.weight"], zero_b);
         auto bnom2 = addBatchnorm2d(network, *conv2->getOutput(0),
             weights[layer_name + ".minor_branch.3.weight"],
@@ -685,7 +694,8 @@ nvinfer1::ILayer* addShuffleNetV2Block(
         weights[layer_name + ".major_branch.4.bias"],
         weights[layer_name + ".major_branch.4.running_mean"],
         weights[layer_name + ".major_branch.4.running_var"]);
-    auto conv5 = network->addConvolutionNd(*bnom4->getOutput(0), mid_channels, nvinfer1::Dims{2,{1,1},{}},
+    int major_out_channels = out_channels - in_channels;
+    auto conv5 = network->addConvolutionNd(*bnom4->getOutput(0), major_out_channels, nvinfer1::Dims{2,{1,1},{}},
         weights[layer_name + ".major_branch.5.weight"], zero_b);
     auto bnom5 = addBatchnorm2d(network, *conv5->getOutput(0),
         weights[layer_name + ".major_branch.6.weight"],
