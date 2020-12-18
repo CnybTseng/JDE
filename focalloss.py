@@ -47,7 +47,7 @@ class SoftmaxFocalLoss(nn.Module):
         
         # Focal loss.
         weight = torch.pow(1 - p_t, self.gamma)
-        eps = float(np.finfo(np.float32).min)
+        eps = torch.finfo(torch.float32).tiny   # The smallest positive representable number
         loss = -alpha_t * weight * torch.log(torch.clamp(p_t, eps))  # N,D1,D2,...,DK
         loss[ignore_mask] = 0
         
