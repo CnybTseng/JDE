@@ -1,4 +1,5 @@
 import torch
+import warnings
 from torch import nn
 from mot.models.builder import BLOCKS
 from mot.models.builder import BACKBONES
@@ -21,37 +22,48 @@ class ShuffleNetV2BuildBlock(nn.Module):
             raise ValueError('illegle stride value: {}'.format(stride))
         
         if stride == 1 and block_in_channels != block_out_channels:
-            raise ValueError('when stride is 1, the input and output'
-                ' channels must be equal')
+            warnings.warn('for stride 1, block_in_channels !='
+                ' block_out_channels violates Guide One!')
+        
+        if stride == 2 and block_in_channels >= block_out_channels:
+            raise ValueError('when stride is 2, the output channels'
+                ' must be greater than the input one')
+        
+        if stride == 2 and block_in_channels != block_out_channels // 2:
+            warnings.warn('for stride 2, block_in_channels !='
+                ' block_out_channels // 2 violates Guide One!')
         
         self.block_in_channels = block_in_channels
         self.block_out_channels = block_out_channels
         self.stride = stride
-        out_channels = block_out_channels // 2
-        in_channels = block_in_channels if stride == 2 else out_channels
+        in_channels = block_in_channels if stride == 2 else block_in_channels // 2
+        out_channels = block_out_channels - in_channels
+        mid_channels = block_out_channels // 2
         self.major_branch = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=1,
+            nn.Conv2d(in_channels, mid_channels, kernel_size=1,
                 stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=stride,
-                padding=1, groups=out_channels, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.Conv2d(out_channels, out_channels, kernel_size=1,
+            nn.Conv2d(mid_channels, mid_channels, kernel_size=3, stride=stride,
+                padding=1, groups=mid_channels, bias=False),
+            nn.BatchNorm2d(mid_channels),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=1,
                 stride=1, padding=0, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True))
         
+        # Shortcut connection for stride one.
         if stride == 1:
             return
-
+        
+        # Keep channels unchanged for minor branch.
         self.minor_branch = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride,
                 padding=1, groups=in_channels, bias=False),
             nn.BatchNorm2d(in_channels),
-            nn.Conv2d(in_channels, out_channels, kernel_size=1,
+            nn.Conv2d(in_channels, in_channels, kernel_size=1,
                 stride=1, padding=0, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(in_channels),
             nn.ReLU(inplace=True))
     
     def forward(self, input):

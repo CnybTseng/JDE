@@ -8,10 +8,10 @@ import shufflenetv2
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-model = shufflenetv2.ShuffleNetV2().to(device)
+model = shufflenetv2.ShuffleNetV2(model_size='1.0x').to(device)
 
 model_dict = model.state_dict()
-trained_model_dict = torch.load('workspace/joint-20201116-01/checkpoint/jde-ckpt-049.pth', map_location='cpu')
+trained_model_dict = torch.load('workspace/joint-20201216-01/checkpoint/jde-ckpt-049.pth', map_location='cpu')
 trained_model_dict = {k : v for (k, v) in trained_model_dict.items() if k in model_dict}
 trained_model_dict = collections.OrderedDict(trained_model_dict)
 model_dict.update(trained_model_dict)

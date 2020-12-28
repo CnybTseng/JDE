@@ -115,6 +115,18 @@ inline cv::Vec4f ltrb2xyah(cv::Vec4f &ltrb)
     return xyah;
 }
 
+inline cv::Vec4f xyah2ltrb(cv::Vec4f &xyah)
+{
+    cv::Vec4f xywh(xyah);
+    xywh[2] *= xywh[3];
+    cv::Vec4f ltrb;
+    ltrb[0] = xywh[0] - xywh[2] / 2;
+    ltrb[1] = xywh[1] - xywh[3] / 2;
+    ltrb[2] = xywh[0] + xywh[2] / 2;
+    ltrb[3] = xywh[1] + xywh[3] / 2;
+    return ltrb;
+}
+
 inline Trajectory::Trajectory() :
     state(New), ltrb(cv::Vec4f()), smooth_embedding(cv::Mat()), id(0),
     is_activated(false), timestamp(0), starttime(0), score(0), eta(0.9), length(0)

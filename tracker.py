@@ -87,6 +87,19 @@ def ltrb2xyah(ltrb):
         xyah = xyah.reshape(-1)
     return xyah
 
+def xyah2ltrb(xyah):
+    dim = len(xyah.shape)
+    xywh = xyah.copy().reshape(-1, 4)
+    xywh[:,2] *= xywh[:,3]
+    ltrb = np.zeros_like(xywh)
+    ltrb[:,0] = xywh[:,0] - xywh[:,2] / 2
+    ltrb[:,1] = xywh[:,1] - xywh[:,3] / 2
+    ltrb[:,2] = xywh[:,0] + xywh[:,2] / 2
+    ltrb[:,3] = xywh[:,1] + xywh[:,3] / 2
+    if dim == 1:
+        ltrb = ltrb.reshape(-1)
+    return ltrb
+
 def nonmax_suppression(dets, score_thresh=0.5, iou_thresh=0.4):
     '''检测器输出的非最大值抑制
     
@@ -226,9 +239,11 @@ class Trajectory(kalman.KalmanFilter):
     def update(self, trajectory, timestamp, update_embedding=True):
         self.timestamp = timestamp
         self.length += 1
-        self.ltrb = trajectory.ltrb
-        self.xyah = trajectory.xyah
-        super().correct(trajectory.xyah)
+        # self.ltrb = trajectory.ltrb
+        # self.xyah = trajectory.xyah
+        mean = super().correct(trajectory.xyah)
+        self.xyah = mean[:4].copy()
+        self.ltrb = xyah2ltrb(self.xyah)
         self.state = TrajectoryState.Tracked
         self.is_activated = True
         self.score = trajectory.score
@@ -244,7 +259,9 @@ class Trajectory(kalman.KalmanFilter):
         self.starttime = timestamp
     
     def reactivate(self, trajectory, timestamp, newid=False):
-        super().correct(trajectory.xyah)
+        mean = super().correct(trajectory.xyah)
+        self.xyah = mean[:4].copy()
+        self.ltrb = xyah2ltrb(self.xyah)
         self.update_embedding(trajectory.current_embedding)
         self.length = 0
         self.state = TrajectoryState.Tracked

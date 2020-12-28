@@ -93,9 +93,11 @@ void Trajectory::update(Trajectory &traj, int timestamp_, bool update_embedding_
 {
     timestamp = timestamp_;
     ++length;
-    ltrb = traj.ltrb;
-    xyah = traj.xyah;    
-    TKalmanFilter::correct(cv::Mat(traj.xyah));    
+    // ltrb = traj.ltrb;
+    // xyah = traj.xyah;    
+    cv::Mat mean_ = TKalmanFilter::correct(cv::Mat(traj.xyah));
+    xyah = mean_(cv::Rect(0, 0, 1, 4));
+    ltrb = xyah2ltrb(xyah);
     state = Tracked;
     is_activated = true;
     score = traj.score;   
@@ -115,7 +117,9 @@ void Trajectory::activate(int timestamp_)
 
 void Trajectory::reactivate(Trajectory &traj, int timestamp_, bool newid)
 {
-    TKalmanFilter::correct(cv::Mat(traj.xyah));
+    cv::Mat mean_ = TKalmanFilter::correct(cv::Mat(traj.xyah));
+    xyah = mean_(cv::Rect(0, 0, 1, 4));
+    ltrb = xyah2ltrb(xyah);
     update_embedding(traj.current_embedding);
     length = 0;
     state = Tracked;

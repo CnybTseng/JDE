@@ -96,14 +96,16 @@ static bool GetLatestLocationOfTrack(JNIEnv *env, jstring tracks,
     }
 
     for (int i = 0; i < jtracks.size(); ++i) {
-        cv::Mat pt = cv::Mat::ones(3, 1, CV_32F);
-        int x = std::stoi(jtracks[i]["rects"][j]["x"].asString(), nullptr);
-        int y = std::stoi(jtracks[i]["rects"][j]["y"].asString(), nullptr);
-        int w = std::stoi(jtracks[i]["rects"][j]["width"].asString(), nullptr);
-        int h = std::stoi(jtracks[i]["rects"][j]["height"].asString(), nullptr);
-        *pt.ptr<float>(0) = x + w * 0.5f;
-        *pt.ptr<float>(1) = y + h;
-        locs.push_back(pt);
+        if (jtracks[i]["rects"].size() > 0) {
+            cv::Mat pt = cv::Mat::ones(3, 1, CV_32F);
+            int x = std::stoi(jtracks[i]["rects"][j]["x"].asString(), nullptr);
+            int y = std::stoi(jtracks[i]["rects"][j]["y"].asString(), nullptr);
+            int w = std::stoi(jtracks[i]["rects"][j]["width"].asString(), nullptr);
+            int h = std::stoi(jtracks[i]["rects"][j]["height"].asString(), nullptr);
+            *pt.ptr<float>(0) = x + w * 0.5f;
+            *pt.ptr<float>(1) = y + h;
+            locs.push_back(pt);
+        }
     }
     
     return true;
