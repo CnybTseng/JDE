@@ -58,7 +58,8 @@ public class Test
         // Merge tracks and save results.
         int channel1 = Integer.parseInt(argv[2]);
         int channel2 = Integer.parseInt(argv[3]);
-        String tracks = handle.merge_track(tracks1, tracks2, channel1, channel2);
+        int cost_thresh = Integer.parseInt(argv[4]);
+        String tracks = handle.merge_track(tracks1, tracks2, channel1, channel2, cost_thresh);
         try (FileWriter writer = new FileWriter("tracks.json"))
         {
             writer.write(tracks);

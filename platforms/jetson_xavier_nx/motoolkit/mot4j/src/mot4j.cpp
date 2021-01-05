@@ -120,10 +120,10 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1mo
             int t = static_cast<int>(round(iter->top));
             int w = static_cast<int>(round(iter->right - iter->left));
             int h = static_cast<int>(round(iter->bottom - iter->top));
-            if (0 == l && 0 == t && 0 == w && 0 == h)
-            {
-                continue;
-            }
+            // if (0 == l && 0 == t && 0 == w && 0 == h)
+            // {
+            //     continue;
+            // }
 
             result[i]["rects"][j]["x"] = std::to_string(l);
             result[i]["rects"][j]["y"] = std::to_string(t);

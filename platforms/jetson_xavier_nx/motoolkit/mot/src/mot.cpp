@@ -317,7 +317,8 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
                     .bottom = titer->ltrb[3],
                     .right = titer->ltrb[2]};
                 riter->rects.push_front(rect);
-                riter->rects.pop_back();
+                if (riter->rects.size() > model.traj_cache_len)
+                    riter->rects.pop_back();
                 titer = tracks.erase(titer);
                 match = true;
             }
@@ -327,7 +328,31 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
         if (match)
             riter++;
         else
-            riter = result.erase(riter);
+        //    riter = result.erase(riter);
+        {
+            MOT_Rect rect = {0, 0, 0, 0};
+            riter->rects.push_front(rect);
+            if (riter->rects.size() > model.traj_cache_len)
+                riter->rects.pop_back();
+            bool valid = false;
+            std::deque<mot::MOT_Rect>::iterator iter;
+            for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
+            {
+                if (iter->left > 0 || iter->right > 0 || iter->top > 0 || iter->bottom > 0)
+                {
+                    valid = true;
+                    break;
+                }
+            }
+            if (valid)
+            {
+                riter++;
+            }
+            else
+            {
+                riter = result.erase(riter);
+            }
+        }
     }
     
     // Initialize new tracks.
@@ -341,9 +366,9 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
         MOT_Track track = {
             .identifier = tracks[i].id,
             .category = std::string(model.categories[0])};
-        track.rects.resize(model.traj_cache_len);
+        // track.rects.resize(model.traj_cache_len);
         track.rects.push_front(rect);
-        track.rects.pop_back();
+        // track.rects.pop_back();
         result.push_back(track);
     }
 #if PROFILE    

@@ -109,7 +109,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         std::chrono::high_resolution_clock::now() - start_motion).count());
     auto start_lap = std::chrono::high_resolution_clock::now();
 #endif 
-    linear_assignment(cost, 0.7f, matches, mismatch_row, mismatch_col);
+    linear_assignment(cost, motion_cost_limit, matches, mismatch_row, mismatch_col);
  #if PROFILE_TRACKER
     profiler.reportLayerTime("linear_assignment", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - start_lap).count());
@@ -156,7 +156,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
     profiler.reportLayerTime("iou_distance", std::chrono::duration<float, std::milli>(
         std::chrono::high_resolution_clock::now() - start_iou_dist).count());
 #endif 
-    linear_assignment(cost, 0.5f, matches, mismatch_row, mismatch_col);
+    linear_assignment(cost, iou_cost_limit1, matches, mismatch_row, mismatch_col);
     
     for (miter = matches.begin(); miter != matches.end(); miter++)
     {
@@ -194,7 +194,7 @@ bool JDETracker::update(const cv::Mat &dets, std::vector<Track> &tracks)
         nnext_candidates[i] = next_candidates[mismatch_col[i]];
     
     cost = iou_distance(unconfirmed_trajectories, nnext_candidates);
-    linear_assignment(cost, 0.7f, matches, mismatch_row, mismatch_col);
+    linear_assignment(cost, iou_cost_limit2, matches, mismatch_row, mismatch_col);
     for (miter = matches.begin(); miter != matches.end(); miter++)
     {
         unconfirmed_trajectories[miter->first]->update(*nnext_candidates[miter->second], timestamp);

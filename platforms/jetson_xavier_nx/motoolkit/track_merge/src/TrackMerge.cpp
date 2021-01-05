@@ -1,4 +1,5 @@
 #include <map>
+#include <cfloat>
 #include <ostream>
 #include <iostream>
 #include <json/json.h>
@@ -52,9 +53,9 @@ static void LinearAssignment(const cv::Mat &cost, float cost_limit,
     if (cost.empty())
     {
         for (int i = 0; i < cost.rows; ++i)
-            mismatch_row.push_back(i);
+            mismatch_row.emplace_back(i);
         for (int i = 0; i < cost.cols; ++i)
-            mismatch_col.push_back(i);
+            mismatch_col.emplace_back(i);
         return;
     }
     
@@ -73,39 +74,52 @@ static void LinearAssignment(const cv::Mat &cost, float cost_limit,
         if (j >= 0)
             matches.insert({i, j});
         else
-            mismatch_row.push_back(i);
+            mismatch_row.emplace_back(i);
     }
     
     for (int j = 0; j < y.rows; ++j)
     {
         int i = *y.ptr<int>(j);
         if (i < 0)
-            mismatch_col.push_back(j);
+            mismatch_col.emplace_back(j);
     }
 }
 
-static bool GetLatestLocationOfTrack(JNIEnv *env, jstring tracks,
-    Json::Value &jtracks, std::vector<cv::Mat> &locs)
+static bool ParseFootprintFromJson(JNIEnv *env, jstring tracks,
+    Json::Value &jtracks, std::vector<std::vector<cv::Mat>> &footprint, cv::Mat H=cv::Mat())
 {
-    const int j = 0;
-    Json::Reader reader;
     std::string stracks = env->GetStringUTFChars(tracks, 0);
-    if (!reader.parse(stracks.c_str(), jtracks)) {
+    JSONCPP_STRING err;
+    Json::CharReaderBuilder builder;
+    const std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+    if (!reader->parse(stracks.c_str(), stracks.c_str() + stracks.length(), &jtracks, &err)) {
         std::cout << "parse json string fail\n" << std::endl;
         return false;
     }
 
     for (int i = 0; i < jtracks.size(); ++i) {
-        if (jtracks[i]["rects"].size() > 0) {
-            cv::Mat pt = cv::Mat::ones(3, 1, CV_32F);
+        std::vector<cv::Mat> fps;
+        for (int j = 0; j < jtracks[i]["rects"].size(); ++j) {
+            cv::Mat fp = cv::Mat::ones(3, 1, CV_32F);
             int x = std::stoi(jtracks[i]["rects"][j]["x"].asString(), nullptr);
             int y = std::stoi(jtracks[i]["rects"][j]["y"].asString(), nullptr);
             int w = std::stoi(jtracks[i]["rects"][j]["width"].asString(), nullptr);
             int h = std::stoi(jtracks[i]["rects"][j]["height"].asString(), nullptr);
-            *pt.ptr<float>(0) = x + w * 0.5f;
-            *pt.ptr<float>(1) = y + h;
-            locs.push_back(pt);
+            if (x > 0 || y > 0 || w > 0 || h > 0) {
+                *fp.ptr<float>(0) = x + w * 0.5f;
+                *fp.ptr<float>(1) = y + h;
+                if (!H.empty()) {
+                    fp = H * fp;
+                    *fp.ptr<float>(0) /= *fp.ptr<float>(2);
+                    *fp.ptr<float>(1) /= *fp.ptr<float>(2);
+                }
+            } else {
+                *fp.ptr<float>(0) = 0;
+                *fp.ptr<float>(1) = 0;
+            }
+            fps.emplace_back(fp);
         }
+        footprint.emplace_back(fps);
     }
     
     return true;
@@ -123,9 +137,15 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_get_1regist
 }
 
 JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1track
-  (JNIEnv *env, jobject obj, jstring tracks1, jstring tracks2, jint channel1, jint channel2)
+  (JNIEnv *env, jobject obj, jstring tracks1, jstring tracks2, jint channel1,
+  jint channel2, jint cost_thresh)
 {
-    Json::Value merge_pairs;
+    Json::Value tracks;
+    if (NULL == tracks1 || NULL == tracks2) {
+        std::cout << "empty track!" << std::endl;
+        return charTojstring(env, tracks.toStyledString().c_str());
+    }
+    
     std::ostringstream oss;
     oss << channel1 << "-" << channel2;
     const std::string &key = oss.str();
@@ -133,74 +153,144 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
     // Requested channels have not been registered yet.
     if (homography.end() == homography.find(key)) {
         std::cout << "channels have not been registered yet" << std::endl;
-        return charTojstring(env, merge_pairs.toStyledString().c_str());
+        return charTojstring(env, tracks.toStyledString().c_str());
     }
     
     // Look up homography matrix.
     cv::Mat &h = homography[key];
-
-    // Construct latest locations array.
-    std::vector<cv::Mat> loc1, loc2;
     Json::Value jtracks1, jtracks2;
-    if (!GetLatestLocationOfTrack(env, tracks1, jtracks1, loc1) ||
-        !GetLatestLocationOfTrack(env, tracks2, jtracks2, loc2)) {
-        return charTojstring(env, merge_pairs.toStyledString().c_str());
-    }
 
-    if (0 == loc1.size() || 0 == loc2.size()) {
-        std::cout << "empty track!" << std::endl;
-        return charTojstring(env, merge_pairs.toStyledString().c_str());
+    // Parse locations from JSON string.
+    std::vector<std::vector<cv::Mat>> footprint1;
+    std::vector<std::vector<cv::Mat>> footprint2;
+    if (!ParseFootprintFromJson(env, tracks1, jtracks1, footprint1, h) ||
+        !ParseFootprintFromJson(env, tracks2, jtracks2, footprint2)) {
+        return charTojstring(env, tracks.toStyledString().c_str());
     }
     
-    // Calculate cost matrix.
-    std::vector<cv::Mat> loc1_warp(loc1.size());
-    cv::Mat cost(loc1.size(), loc2.size(), CV_32F);
-    for (int k = 0; k < loc1.size(); ++k) {
-        // Warp location of the first channel to the second channel.
-        cv::Mat &loc = loc1_warp[k];
-        loc = h * loc1[k];
-        *loc.ptr<float>(0) /= *loc.ptr<float>(2);
-        *loc.ptr<float>(1) /= *loc.ptr<float>(2);
-        // Norm-L2 distance.
-        for (int l = 0; l < loc2.size(); ++l) {
-            *cost.ptr<float>(k, l) = static_cast<float>(
-                cv::norm(loc(cv::Rect(0, 0, 1, 2)), loc2[l](cv::Rect(0, 0, 1, 2))));
+    if (0 == footprint1.size() || 0 == footprint2.size()) {
+        std::cout << "empty track!" << std::endl;
+        return charTojstring(env, tracks.toStyledString().c_str());
+    }
+
+    // Calculate cost matrix.    
+    cv::Mat cost(footprint1.size(), footprint2.size(), CV_32F);
+    for (int i = 0; i < footprint1.size(); ++i) {
+        for (int j = 0; j < footprint2.size(); ++j) {
+            float dists = 0;
+            float num_align = 0;
+            // Overlap track length from now to past.
+            int overlap_len = std::min<size_t>(footprint1[i].size(), footprint2[j].size());
+            for (int k = 0; k < overlap_len; ++k) {
+                cv::Mat &fp1 = footprint1[i][k];
+                cv::Mat &fp2 = footprint2[j][k];
+                // Ignore track lost footprint.
+                if ((0 == *fp1.ptr<float>(0) && 0 == *fp1.ptr<float>(1)) ||
+                    (0 == *fp2.ptr<float>(0) && 0 == *fp2.ptr<float>(1))) {
+                    break;
+                }
+                float dx = *fp1.ptr<float>(0) - *fp2.ptr<float>(0);
+                float dy = *fp1.ptr<float>(1) - *fp2.ptr<float>(1);
+                dists += sqrt(dx * dx + dy * dy);
+                ++num_align;
+                // if (k < 25)
+                //     fprintf(stdout, ">>> %d %d %f\n", i, j, sqrt(dx * dx + dy * dy));
+            }
+            if (num_align > 0)
+                dists = dists / num_align;
+            else
+                dists = FLT_MAX;
+            *cost.ptr<float>(i, j) = dists;
         }
     }
 
     // Linear assignment.
-    const float cost_limit = 50;
     std::map<int, int> matches;
     std::vector<int> mismatch_row;
     std::vector<int> mismatch_col;
-    LinearAssignment(cost, cost_limit, matches, mismatch_row, mismatch_col);
+    LinearAssignment(cost, static_cast<float>(cost_thresh), matches, mismatch_row, mismatch_col);
     
     // Construct merged pair.
-    int cnt = 0;
+    // int cnt = 0;
+    // std::map<int, int>::iterator iter0;
+    // for (iter0 = matches.begin(); iter0 != matches.end(); iter0++) {
+    //     tracks[cnt]["track1"] = jtracks1[iter0->first]["identifier"];
+    //     tracks[cnt]["track2"] = jtracks2[iter0->second]["identifier"];
+    //     cnt++;
+    // }
+    
+    // Merge overlap tracks.
+    int merged_id = 0;
     std::map<int, int>::iterator iter;
     for (iter = matches.begin(); iter != matches.end(); iter++) {
-        merge_pairs[cnt]["track1"] = jtracks1[iter->first]["identifier"];
-        merge_pairs[cnt]["track2"] = jtracks2[iter->second]["identifier"];
-        cnt++;
+        Json::Value rects;
+        tracks[merged_id]["identifier"] = std::to_string(merged_id);
+        tracks[merged_id]["category"] = jtracks2[iter->second]["category"];
+        tracks[merged_id]["rects"] = rects;
+        std::vector<cv::Mat> &fps1 = footprint1[iter->first];
+        std::vector<cv::Mat> &fps2 = footprint2[iter->second];
+        
+        // Give priority to the second channel track.
+        for (int i = 0; i < fps2.size(); ++i) {
+            tracks[merged_id]["rects"][i] = jtracks2[iter->second]["rects"][i];
+        }
+        
+        // Only if fps1 is longer than fps2.
+        for (int i = fps2.size(); i < fps1.size(); ++i) {
+            int x = static_cast<int>(round(*fps1[i].ptr<float>(0)));
+            int y = static_cast<int>(round(*fps1[i].ptr<float>(1)));
+            tracks[merged_id]["rects"][i]["x"] = std::to_string(x);
+            tracks[merged_id]["rects"][i]["y"] = std::to_string(y);
+            tracks[merged_id]["rects"][i]["width"] = 0;
+            tracks[merged_id]["rects"][i]["height"] = 0;
+        }
+        
+        merged_id++;
     }
-#if 0
-    // Debug.
-    FILE *fp = fopen("warp.txt", "w");
-    for (int k = 0; k < loc1_warp.size(); ++k) {
-        cv::Mat &loc = loc1_warp[k];
-        fprintf(fp, "%f %f\n", *loc.ptr<float>(0), *loc.ptr<float>(1));
-    }
-    fclose(fp);
-    std::cout << "cost=\n" << cost << std::endl;
-    for (iter = matches.begin(); iter != matches.end(); iter++) {
-        std::cout << "match: " << iter->first << "," << iter->second << std::endl;
-    }
+    
+    // Append non-overlap tracks.
     for (int i = 0; i < mismatch_row.size(); ++i) {
-        std::cout << "row mismatch: " << mismatch_row[i] << std::endl;
-    }    
-    for (int i = 0; i < mismatch_col.size(); ++i) {
-        std::cout << "col mismatch: " << mismatch_col[i] << std::endl;
+        Json::Value rects;
+        tracks[merged_id]["identifier"] = std::to_string(merged_id);
+        tracks[merged_id]["category"] = jtracks1[mismatch_row[i]]["category"];
+        tracks[merged_id]["rects"] = rects;
+        std::vector<cv::Mat> &fps1 = footprint1[mismatch_row[i]];
+        for (int j = 0; j < fps1.size(); ++j) {
+            int x = static_cast<int>(round(*fps1[j].ptr<float>(0)));
+            int y = static_cast<int>(round(*fps1[j].ptr<float>(1)));
+            tracks[merged_id]["rects"][j]["x"] = std::to_string(x);
+            tracks[merged_id]["rects"][j]["y"] = std::to_string(y);
+            tracks[merged_id]["rects"][j]["width"] = std::to_string(0);
+            tracks[merged_id]["rects"][j]["height"] = std::to_string(0);
+        }
+        ++merged_id;
     }
-#endif
-    return charTojstring(env, merge_pairs.toStyledString().c_str());
+    
+    for (int j = 0; j < mismatch_col.size(); ++j) {
+        tracks[merged_id] = jtracks2[mismatch_col[j]];
+        tracks[merged_id]["identifier"] = std::to_string(merged_id);
+        ++merged_id;
+    }
+
+    // Debug.
+    // FILE *fp = fopen("warp.txt", "w");
+    // for (int k = 0; k < footprint1.size(); ++k) {
+    //     cv::Mat &loc = footprint1[k][0];
+    //     fprintf(fp, "%f %f\n", *loc.ptr<float>(0), *loc.ptr<float>(1));
+    // }
+    // fclose(fp);
+    // std::cout << "cost=\n" << cost << std::endl;
+    // for (iter = matches.begin(); iter != matches.end(); iter++) {
+    //     std::cout << "match: " << jtracks1[iter->first]["identifier"] <<
+    //         "," << jtracks2[iter->second]["identifier"] << "||" <<
+    //         iter->first << ", " << iter->second << std::endl;
+    // }
+    // for (int i = 0; i < mismatch_row.size(); ++i) {
+    //     std::cout << "row mismatch: " << mismatch_row[i] << std::endl;
+    // }    
+    // for (int i = 0; i < mismatch_col.size(); ++i) {
+    //     std::cout << "col mismatch: " << mismatch_col[i] << std::endl;
+    // }
+
+    return charTojstring(env, tracks.toStyledString().c_str());
 }

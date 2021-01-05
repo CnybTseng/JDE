@@ -18,10 +18,10 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_get_1regist
 /*
  * Class:     com_sihan_system_jni_utils_TrackMerge
  * Method:    merge_track
- * Signature: (Ljava/lang/String;Ljava/lang/String;II)Ljava/lang/String;
+ * Signature: (Ljava/lang/String;Ljava/lang/String;III)Ljava/lang/String;
  */
 JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1track
-  (JNIEnv *, jobject, jstring, jstring, jint, jint);
+  (JNIEnv *, jobject, jstring, jstring, jint, jint, jint);
 
 #ifdef __cplusplus
 }
