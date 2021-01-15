@@ -98,26 +98,28 @@ class ShuffleNetV2(nn.Module):
     
     Param
     -----
-    stage_repeat      : Number of building blocks for each stage.
-                        Default: ShuffleNetV2.0.5x configuration.
-    stage_out_channels: Output channels for each stage.
-                        Default: ShuffleNetV2.0.5x configuration.
-    with_head         : Building model with classifier head or not.
-                        Default: False.
-    num_class         : Number of classes if set with_head as True.
-                        Default: 1000.
-    pretrained        : Pretrained model path. Currently only support models from
-                        https://github.com/megvii-model/ShuffleNet-Series.git
-                        Default: None.
+    arch      : ShuffleNetV2 architecture.
+        Default: ShuffleNetV2.0.5x.
+    with_head : Building model with classifier head or not.
+                Default: False.
+    num_class : Number of classes if set with_head as True.
+                Default: 1000.
+    pretrained: Pretrained model path. Currently only support models from
+                https://github.com/megvii-model/ShuffleNet-Series.git
+                Default: None.
     '''
-    def __init__(self, stage_repeat={'stage2': 4, 'stage3': 8, 'stage4': 4},
-        stage_out_channels={'conv1': 24, 'stage2': 48, 'stage3': 96,
-        'stage4': 192, 'conv5': 1024}, with_head=False, num_class=1000,
-        pretrained=None, output_modules=['stage2', 'stage3', 'stage4']):
+    def __init__(self, arch={
+            'conv1':  {'out_channels': 24},
+            'stage2': {'out_channels': 48, 'repeate': 4, 'out': True},
+            'stage3': {'out_channels': 96, 'repeate': 8, 'out': True},
+            'stage4': {'out_channels': 192, 'repeate':4, 'out': True},
+            'conv5':  {'out_channels': 1024}},
+            with_head=False, num_class=1000, pretrained=None):
         super(ShuffleNetV2, self).__init__()
         
+        self.arch = arch
         in_channels = 3
-        out_channels = stage_out_channels['conv1']
+        out_channels = arch['conv1']['out_channels']
         self.conv1 = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3,
                 stride=2, padding=1, bias=False),
@@ -126,17 +128,17 @@ class ShuffleNetV2(nn.Module):
         
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        for stage, repeat in stage_repeat.items():
-            in_channels, out_channels = out_channels, stage_out_channels[stage]
+        for stage in list(filter(lambda x: 'stage' in x, arch.keys())):
+            in_channels, out_channels = out_channels, arch[stage]['out_channels']
             blocks = [ShuffleNetV2BuildBlock(in_channels, out_channels, 2)]
-            for r in range(1, repeat):
+            for _ in range(1, arch[stage]['repeate']):
                 blocks.append(ShuffleNetV2BuildBlock(out_channels, out_channels, 1))
             setattr(self, stage, nn.Sequential(*blocks))
         
         self.with_head = with_head
         if with_head:        
-            in_channels, out_channels = map(stage_out_channels.get,
-                ['stage4', 'conv5'])
+            in_channels = out_channels
+            out_channels = arch['conv5']['out_channels']
             self.conv5 = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=1,
                     stride=1, padding=0, bias=False),
@@ -145,18 +147,22 @@ class ShuffleNetV2(nn.Module):
             
             self.globalpool = nn.AvgPool2d(kernel_size=7)
             self.fc = nn.Linear(out_channels, num_class, bias=False)
-        
-        self.output_modules = output_modules
+            self.arch['fc'] = {'out_channels': num_class, 'out': True}
+            for stage in list(filter(lambda x: 'stage' in x, arch.keys())):
+                self.arch[stage]['out'] = False
+
         self._init_weights()
-        if pretrained:
+        if pretrained is not None:
             self._load_pretrained_model(pretrained)
         
     def forward(self, input, *args, **kwargs):
         """ShuffleNetV2 forward"""
         outputs = []
         for name, module in self.named_children():
+            if name == 'fc':
+                input = input.contiguous().view(-1, input.shape[1])
             input = module(input)
-            if name in self.output_modules:
+            if name in self.arch.keys() and self.arch[name].get('out', False):
                 outputs.append(input)
         return tuple(outputs)
     
@@ -207,3 +213,19 @@ class ShuffleNetV2(nn.Module):
                 assert(module.num_batches_tracked.size() == params[i].size())
                 module.num_batches_tracked.data, i = params[i].data, i + 1
         assert(i == len(params))
+    
+    @property
+    def out_channels(self):
+        _out_channels = {}
+        for key, value in self.arch.items():
+            if value.get('out', False):
+                _out_channels[key] = value['out_channels']
+        return _out_channels
+
+if __name__ == '__main__':
+    x = torch.rand(64, 3, 224, 224)
+    model = SOSNet(with_head=False)
+    y = model(x)
+    for yi in y:
+        print(yi.shape)
+    print(model.out_channels)

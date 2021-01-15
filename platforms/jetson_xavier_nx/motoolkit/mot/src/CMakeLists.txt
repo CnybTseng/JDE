@@ -7,7 +7,9 @@ add_library(mot SHARED ${libsrcs})
 add_dependencies(mot motplugin)
 target_link_libraries(
     mot
+    libopencv_dnn.a
     libopencv_video.a
+    libopencv_imgcodecs.a
     libopencv_imgproc.a
     libopencv_core.a
     libade.a

@@ -16,3 +16,7 @@
 1> mot模块新增输出历史轨迹(对应第一个点的参数全为零的轨迹); mot模块配置参数更新
 2> mot4j模块保留轨迹中的全零点
 3> track_merge的merge_track()接口修改, 新增cost_thresh参数; 接口返回值由轨迹匹配关系替换为融合之后的轨迹
+
+2020.01.06
+1> track_merge模块merge_track函数对传入的jstring类型轨迹进行null判断, 防止GetStringUTFChars崩溃
+2> track_merge模块merge_track函数对返回的轨迹点新增通道字段; 返回的轨迹点不再统一映射到第二通道, 保持在原来通道

@@ -1,0 +1,19 @@
+SYSTEM:
+    TASK_DIR: ./tasks/20210113A
+
+DATASET:
+    ARGS: [["/data/tseng/dataset/jde"], {'cfg': './data/train.txt', 'backbone': 'shufflenetv2', 'augment': True}]
+
+MODEL:
+    ARGS:
+        BACKBONE:
+            NAME: ShuffleNetV2
+            ARGS: [[], {'arch': {
+                'conv1':  {'out_channels': 24},
+                'stage2': {'out_channels': 116, 'repeate': 4, 'out': True},
+                'stage3': {'out_channels': 232, 'repeate': 8, 'out': True},
+                'stage4': {'out_channels': 464, 'repeate': 4, 'out': True},
+                'conv5':  {'out_channels': 1024}},
+                'pretrained': '/data/tseng/project/JDE/models/ShuffleNetV2.1.0x.pth.tar'}]
+        NECK:
+            ARGS: [[], {'in_channels': [116, 232, 464]}]

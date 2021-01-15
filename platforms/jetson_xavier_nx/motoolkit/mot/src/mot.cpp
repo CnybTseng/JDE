@@ -35,7 +35,7 @@ static void letterbox_image(const cv::Mat& in, cv::Mat& out)
     int right = round(dx + 0.1f);
     int above = round(dy - 0.1f);
     int below = round(dy + 0.1f);
-    cv::resize(in, out(cv::Rect(left, above, nw, nh)), cv::Size(nw, nh), cv::INTER_AREA);
+    cv::resize(in, out(cv::Rect(left, above, nw, nh)), cv::Size(nw, nh), 0, 0, cv::INTER_AREA);
 }
 
 static void correct_bbox(float *ltrb, int imw, int imh, int niw, int nih)

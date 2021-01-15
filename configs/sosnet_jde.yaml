@@ -1,0 +1,12 @@
+MODEL:
+    ARGS:
+        BACKBONE:
+            NAME: SOSNet
+            ARGS: [[], {'arch': {
+                'conv1':  {'out_channels': 16},
+                'stage2': {'out_channels': 64, 'repeate': 2, 'out': True},
+                'stage3': {'out_channels': 96, 'repeate': 2, 'out': True},
+                'stage4': {'out_channels': 128, 'repeate': 2, 'out': True},
+                'conv5':  {'out_channels': 1024}}}]
+        NECK:
+            ARGS: [[], {'in_channels': [64, 96, 128]}]

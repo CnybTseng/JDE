@@ -27,6 +27,10 @@
 #define INTEGRATES_DECODER 0    
 #endif
 
+#define USE_INT8                    //! USE_FP32 or USE_FP16 or USE_INT8
+
+#define USE_CHUNK_PLUGIN 0
+
 #define SAFETY_FREE(mem)    \
 do {                        \
     if (mem) {              \
@@ -149,6 +153,38 @@ constexpr long long int operator""_MiB(long long unsigned int val)
 
 // 重载cout打印nvinfer1::Dims型变量
 std::ostream& operator<<(std::ostream& os, nvinfer1::Dims dims);
+
+class DimsX : public nvinfer1::Dims
+{
+public:
+    DimsX()
+    {
+        _numel = 0;
+    };
+    DimsX(nvinfer1::Dims dims) : nvinfer1::Dims(dims)
+    {
+        if (0 == nbDims) {
+            _numel = 0;
+        } else {
+            _numel = 1;
+            for (int i = 0; i < nbDims; ++i) {
+                _numel *= d[i];
+            }
+        }
+    };
+    int32_t numel()
+    {
+        return _numel;
+    }
+    int32_t numel() const
+    {
+        return _numel;
+    }
+private:
+    int32_t _numel;
+};
+
+bool read_file_list(const char *dirname, std::vector<std::string> &filenames);
 
 }   // namespace mot
 

@@ -1,0 +1,27 @@
+SYSTEM:
+    TASK_DIR: ./tasks/20210113
+
+DATASET:
+    ARGS: [["/data/tseng/dataset/jde"], {'cfg': './data/train-mini.txt', 'backbone': 'shufflenetv2', 'augment': True}]
+
+MODEL:
+    ARGS:
+        BACKBONE:
+            NAME: ShuffleNetV2
+            ARGS: [[], {'arch': {
+                'conv1':  {'out_channels': 24},
+                'stage2': {'out_channels': 116, 'repeate': 4, 'out': True},
+                'stage3': {'out_channels': 232, 'repeate': 8, 'out': True},
+                'stage4': {'out_channels': 464, 'repeate': 4, 'out': True},
+                'conv5':  {'out_channels': 1024}},
+                'pretrained': '/data/tseng/project/JDE/models/ShuffleNetV2.1.0x.pth.tar'}]
+        NECK:
+            ARGS: [[], {'in_channels': [116, 232, 464]}]
+
+SOLVER:
+    WARMUP: 200
+    EPOCHS: 30
+    OPTIM:
+        ARGS: [[], {'lr': 0.0025, 'momentum': 0.9, 'weight_decay': 0.0001}]
+    LR_SCHEDULER:
+        ARGS: [[[15, 22]], {'gamma': 0.1}]

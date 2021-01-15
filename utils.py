@@ -28,36 +28,37 @@ def get_logger(name='root', path=None):
 class TrainScaleSampler(object):
     '''Multiple scales training scale sampler.
     
-    Args:
-        size: Default sampling size. The size is [height, width].
-        scale_step: Image scale step. The scale_step is [ystart, ystop,
-            num[, xstart, xstop]]. The ystart is the starting value of the
-            image height sequence, and the ystop is the end value of the
-            image height sequence. The num is the number of samples to
-            generate. The xstart and xstop are optional, if neither of
-            them is seted, xstart and xstop will be equal to ystart and
-            ystop respectively.
-        rescale_freq: Image rescale frequency. The image will be rescaled
-            every #rescale_freq batches.
+    Param
+    -----
+    size  : Default sampling size. The size is [height, width].
+    steps : Image scale step. The steps is [ystart, ystop,
+        num[, xstart, xstop]]. The ystart is the first element of the
+        image height sequence, and the ystop is the last element of the
+        image height sequence. The num is the number of samples to be 
+        generated. The xstart and xstop are optional, if neither of
+        them is seted, xstart and xstop will be equal to ystart and
+        ystop respectively.
+    period: Image rescale frequency. The image will be rescaled
+        every 'period' batches.
     '''
-    def __init__(self, size=(416,416), scale_step=(320,608,10),
-        rescale_freq=320):
-        self.scale_step = scale_step
-        self.rescale_freq = rescale_freq
+    def __init__(self, size=torch.IntTensor([320,576]),
+        steps=(320,160,2,576,288), period=80):
         self.size = size
+        self.steps = steps
+        self.period = period
     
     def __call__(self, num_batches=0):
-        if num_batches % self.rescale_freq == 0:
-            heights = np.linspace(self.scale_step[0], self.scale_step[1],
-                num=self.scale_step[2], dtype=np.int32)
-            if len(scale_step == 5):
-                widths = np.linspace(self.scale_step[3], self.scale_step[4],
-                    num=self.scale_step[2], dtype=np.int32)
+        if num_batches % self.period == 0:
+            heights = np.linspace(self.steps[0], self.steps[1],
+                num=self.steps[2], dtype=np.int32)
+            if len(self.steps) == 5:
+                widths = np.linspace(self.steps[3], self.steps[4],
+                    num=self.steps[2], dtype=np.int32)
             else:
                 widths = heights
             rn = np.random.randint(len(heights))
-            self.size = [heights[rn].item(), widths[rn],item()]
-        return self.size
+            self.size[0] = heights[rn].item()
+            self.size[1] = widths[rn].item()
 
 def make_workspace_dirs(workspace='./workspace'):
     if not os.path.exists(workspace):

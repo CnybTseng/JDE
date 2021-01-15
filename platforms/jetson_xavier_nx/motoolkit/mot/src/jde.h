@@ -4,40 +4,11 @@
 #include <vector>
 #include <memory>
 #include <NvInfer.h>
+#include "utils.h"
 
 #define NUM_BINDINGS 4
 
 namespace mot {
-
-class DimsX : public nvinfer1::Dims
-{
-public:
-    DimsX()
-    {
-        _numel = 0;
-    };
-    DimsX(nvinfer1::Dims dims) : nvinfer1::Dims(dims)
-    {
-        if (0 == nbDims) {
-            _numel = 0;
-        } else {
-            _numel = 1;
-            for (int i = 0; i < nbDims; ++i) {
-                _numel *= d[i];
-            }
-        }
-    };
-    int32_t numel()
-    {
-        return _numel;
-    }
-    int32_t numel() const
-    {
-        return _numel;
-    }
-private:
-    int32_t _numel;
-};
 
 class JDE
 {

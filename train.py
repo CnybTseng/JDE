@@ -19,6 +19,7 @@ import utils
 import darknet
 import dataset as ds
 import shufflenetv2
+import sosmot
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -36,7 +37,7 @@ def parse_args():
         help='training batch size')
     parser.add_argument('--accumulated-batches', type=int, default=1,
         help='update weights every accumulated batches')
-    parser.add_argument('--scale-step', type=int, default=[320,608,10],
+    parser.add_argument('--scale-step', type=int, default=[320,160,2,576,288],
         nargs='+', help='scale step for multi-scale training')
     parser.add_argument('--rescale-freq', type=int, default=80,
         help='image rescaling frequency')
@@ -129,15 +130,17 @@ def train(args):
     utils.make_workspace_dirs(args.workspace)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     anchors = np.loadtxt(args.anchors) if args.anchors else None
-    scale_sampler = utils.TrainScaleSampler(args.in_size, args.scale_step,
-        args.rescale_freq)
+    # Shared size between collate_fn and scale sampler.
     shared_size = torch.IntTensor(args.in_size).share_memory_()
+    scale_sampler = utils.TrainScaleSampler(shared_size, args.scale_step,
+        args.rescale_freq)
     logger = utils.get_logger(path=os.path.join(args.workspace, 'log.txt'))
     
     torch.backends.cudnn.benchmark = True
     
-    dataset = ds.HotchpotchDataset(args.dataset_root, './data/train.txt', args.backbone)
-    collate_fn = partial(ds.collate_fn, in_size=shared_size, train=True)
+    dataset = ds.HotchpotchDataset(args.dataset_root, cfg='./data/train.txt',
+        backbone=args.backbone, augment=True)
+    collate_fn = partial(ds.collate_fn, in_size=shared_size)
     data_loader = torch.utils.data.DataLoader(dataset, args.batch_size,
         True, num_workers=args.workers, collate_fn=collate_fn,
         pin_memory=args.pin, drop_last=True)
@@ -149,6 +152,10 @@ def train(args):
     elif args.backbone == 'shufflenetv2':
         model = shufflenetv2.ShuffleNetV2(anchors, num_classes=args.num_classes,
             num_ids=num_ids, model_size=args.thin, box_loss=args.box_loss,
+            cls_loss=args.cls_loss).to(device)
+    elif args.backbone == 'sosnet':
+        model = sosmot.SOSMOT(anchors, num_classes=args.num_classes,
+            num_ids=num_ids, box_loss=args.box_loss,
             cls_loss=args.cls_loss).to(device)
     else:
         print('unknown backbone architecture!')
@@ -195,7 +202,6 @@ def train(args):
     logger.info(args)
     logger.info('Start training from epoch {}'.format(start_epoch))
     model_path = f'{args.workspace}/checkpoint/{args.savename}-ckpt-%03d.pth'
-    size = shared_size.numpy().tolist()
     
     for epoch in range(start_epoch, args.epochs):
         model.train()
@@ -211,7 +217,7 @@ def train(args):
                 for i, g in enumerate(optimizer.param_groups):
                     g['lr'] = lr * args.lr_coeff[i]
         
-            loss, metrics = model(images.to(device), targets.to(device), size)
+            loss, metrics = model(images.to(device), targets.to(device), images.shape[2:])
             loss.backward()
             
             if args.sparsity:
@@ -226,13 +232,12 @@ def train(args):
                 rmetrics[k] = (rmetrics[k] * batch + metrics[k]) / (batch + 1)
             
             fmt = tuple([('%g/%g') % (epoch, args.epochs), ('%g/%g') % (batch,
-                len(data_loader)), ('%gx%g') % (size[0], size[1])] + \
+                len(data_loader)), ('%gx%g') % (shared_size[0].item(), shared_size[1].item())] + \
                 list(rmetrics.values()) + [optimizer.param_groups[0]['lr']])
             if batch % args.print_interval == 0:
                 logger.info(('%8s%10s%10s' + '%10.3g' * (len(rmetrics.values()) + 1)) % fmt)
 
-            size = scale_sampler(num_batches)
-            shared_size[0], shared_size[1] = size[0], size[1]
+            scale_sampler(num_batches)
       
         torch.save(model.state_dict(), f"{model_path}" % epoch)
         torch.save({'epoch' : epoch,

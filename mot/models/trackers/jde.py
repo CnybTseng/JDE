@@ -1,4 +1,5 @@
 from torch import nn
+from collections import OrderedDict
 from mot.models.builder import (TRACKERS,
     build_backbone, build_neck, build_head)
 
@@ -22,3 +23,12 @@ class JDE(nn.Module):
         for module in self.children():
             input = module(input, *args, **kwargs)
         return input
+    
+    def load_state_dict(self, state_dict, strict=True):
+        """Same to torch.nn.Module.load_state_dict"""
+        sd = self.state_dict()
+        # Remove layers only for training if in test mode.
+        state_dict = {k : v for (k, v) in state_dict.items() if k in sd}
+        state_dict = OrderedDict(state_dict)
+        sd.update(state_dict)
+        super().load_state_dict(sd)

@@ -1,6 +1,8 @@
 import os
+import sys
 import torch
 import argparse
+sys.path.append(os.getcwd())
 from mot.utils import config
 from mot.models import build_tracker
 
@@ -9,6 +11,8 @@ def parse_args():
         description='Training multiple object tracker.')
     parser.add_argument('--config', type=str, default='',
         help='training configuration file path')
+    parser.add_argument('--weight', type=str, default='',
+        help='model weight filepath')
     parser.add_argument('opts', default=None, nargs=argparse.REMAINDER,
         help='modify configuration in command line')
     return parser.parse_args()
@@ -22,11 +26,14 @@ def main():
     print(config)
     
     model = build_tracker(config.MODEL)
-    model.eval()
+    if os.path.isfile(args.weight):
+        model.load_state_dict(torch.load(args.weight, map_location='cpu'))
+    model.cuda().eval()
     print(model)
     
     input = torch.rand(64, 3, 320, 576)
-    output = model(input)
+    with torch.no_grad():
+        output = model(input.cuda())
     print('output size: {}'.format(output.size()))
     
 if __name__ == '__main__':

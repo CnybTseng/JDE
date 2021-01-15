@@ -233,16 +233,19 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
         // Give priority to the second channel track.
         for (int i = 0; i < fps2.size(); ++i) {
             tracks[merged_id]["rects"][i] = jtracks2[iter->second]["rects"][i];
+            tracks[merged_id]["rects"][i]["channel"] = std::to_string(channel2);
         }
         
         // Only if fps1 is longer than fps2.
         for (int i = fps2.size(); i < fps1.size(); ++i) {
-            int x = static_cast<int>(round(*fps1[i].ptr<float>(0)));
-            int y = static_cast<int>(round(*fps1[i].ptr<float>(1)));
-            tracks[merged_id]["rects"][i]["x"] = std::to_string(x);
-            tracks[merged_id]["rects"][i]["y"] = std::to_string(y);
-            tracks[merged_id]["rects"][i]["width"] = 0;
-            tracks[merged_id]["rects"][i]["height"] = 0;
+            // int x = static_cast<int>(round(*fps1[i].ptr<float>(0)));
+            // int y = static_cast<int>(round(*fps1[i].ptr<float>(1)));
+            // tracks[merged_id]["rects"][i]["x"] = std::to_string(x);
+            // tracks[merged_id]["rects"][i]["y"] = std::to_string(y);
+            // tracks[merged_id]["rects"][i]["width"] = 0;
+            // tracks[merged_id]["rects"][i]["height"] = 0;
+            tracks[merged_id]["rects"][i] = jtracks1[iter->first]["rects"][i];
+            tracks[merged_id]["rects"][i]["channel"] = std::to_string(channel1);
         }
         
         merged_id++;
@@ -254,21 +257,33 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
         tracks[merged_id]["identifier"] = std::to_string(merged_id);
         tracks[merged_id]["category"] = jtracks1[mismatch_row[i]]["category"];
         tracks[merged_id]["rects"] = rects;
-        std::vector<cv::Mat> &fps1 = footprint1[mismatch_row[i]];
-        for (int j = 0; j < fps1.size(); ++j) {
-            int x = static_cast<int>(round(*fps1[j].ptr<float>(0)));
-            int y = static_cast<int>(round(*fps1[j].ptr<float>(1)));
-            tracks[merged_id]["rects"][j]["x"] = std::to_string(x);
-            tracks[merged_id]["rects"][j]["y"] = std::to_string(y);
-            tracks[merged_id]["rects"][j]["width"] = std::to_string(0);
-            tracks[merged_id]["rects"][j]["height"] = std::to_string(0);
+        // std::vector<cv::Mat> &fps1 = footprint1[mismatch_row[i]];
+        // for (int j = 0; j < fps1.size(); ++j) {
+        //     int x = static_cast<int>(round(*fps1[j].ptr<float>(0)));
+        //     int y = static_cast<int>(round(*fps1[j].ptr<float>(1)));
+        //     tracks[merged_id]["rects"][j]["x"] = std::to_string(x);
+        //     tracks[merged_id]["rects"][j]["y"] = std::to_string(y);
+        //     tracks[merged_id]["rects"][j]["width"] = std::to_string(0);
+        //     tracks[merged_id]["rects"][j]["height"] = std::to_string(0);
+        // }
+        for (int j = 0; j < jtracks1[mismatch_row[i]]["rects"].size(); ++j) {
+            tracks[merged_id]["rects"][j] = jtracks1[mismatch_row[i]]["rects"][j];
+            tracks[merged_id]["rects"][j]["channel"] = std::to_string(channel1);
         }
         ++merged_id;
     }
     
-    for (int j = 0; j < mismatch_col.size(); ++j) {
-        tracks[merged_id] = jtracks2[mismatch_col[j]];
+    for (int i = 0; i < mismatch_col.size(); ++i) {
+        // tracks[merged_id] = jtracks2[mismatch_col[i]];
+        // tracks[merged_id]["identifier"] = std::to_string(merged_id);
+        Json::Value rects;
         tracks[merged_id]["identifier"] = std::to_string(merged_id);
+        tracks[merged_id]["category"] = jtracks2[mismatch_col[i]]["category"];
+        tracks[merged_id]["rects"] = rects;
+        for (int j = 0; j < jtracks2[mismatch_col[i]]["rects"].size(); ++j) {
+            tracks[merged_id]["rects"][j] = jtracks2[mismatch_col[i]]["rects"][j];
+            tracks[merged_id]["rects"][j]["channel"] = std::to_string(channel2);
+        }
         ++merged_id;
     }
 

@@ -108,24 +108,39 @@ class JDEHead(nn.Module):
         '''
         assert(isinstance(input, tuple))
         outputs = []
-        for i, inp in enumerate(input):
+        for i, inp in enumerate(reversed(input)):
             det = self.detect[i](inp)
             ide = self.identify[i](inp)
             outputs.append(torch.cat([det, ide], dim=1))
         if self.training:
             assert(isinstance(target, torch.Tensor))
             if im_size is None:
-                assert(isinstance(im_size, list))
                 im_size = self.im_size
+            else:
+                if isinstance(im_size, list):
+                    pass
+                elif isinstance(im_size, torch.Tensor):
+                    im_size = im_size.cpu().numpy().tolist()
+                else:
+                    raise TypeError('expect list or torch.Tensor,'
+                        ' but got {}'.format(type(im_size)))
             return self._forward_train(outputs, target, im_size)
         else:
             return self._forward_eval(outputs)
     
     def _init_weights(self):
         """Initialize weights"""
-        for module in self.detect:
-            std = 1.0 / module[-1].weight.shape[1]
-            nn.init.normal_(module[-1].weight, mean=0, std=std)
+        for name, module in self.named_modules():
+            if isinstance(module, torch.nn.Conv2d):
+                torch.nn.init.normal_(module.weight.data)
+                module.weight.data *= (2.0/module.weight.numel())
+                if module.bias is not None:
+                    torch.nn.init.constant_(module.bias.data, 0)
+            elif isinstance(module, torch.nn.BatchNorm2d):
+                torch.nn.init.constant_(module.weight.data, 1)
+                torch.nn.init.constant_(module.bias.data, 0)
+                torch.nn.init.constant_(module.running_mean.data, 0)
+                torch.nn.init.constant_(module.running_var.data, 0)
     
     def _forward_train(self, input, target, im_size):
         '''JDELoss forward propagation.
@@ -192,6 +207,7 @@ class JDEHead(nn.Module):
         
         # Make up log information.
         metrics = {
+            'SIZE': '{}x{}'.format(im_size[0], im_size[1]),
             'LBOX': sum([l.detach().cpu().item() for l in loss_box]),
             'LCLS': sum([l.detach().cpu().item() for l in loss_cls]),
             'LIDE': sum([l.detach().cpu().item() for l in loss_ide]),

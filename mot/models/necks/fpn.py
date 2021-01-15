@@ -98,15 +98,17 @@ class FPN(nn.Module):
         self._init_weights()
     
     def _init_weights(self):
-        # A bad implementation for now!
-        for module in self.modules():
+        for name, module in self.named_modules():
             if isinstance(module, nn.Conv2d):
-                nn.init.xavier_uniform_(module.weight, gain=1)
+                nn.init.normal_(module.weight.data)
+                module.weight.data *= (2.0/module.weight.numel())
                 if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
+                    nn.init.constant_(module.bias.data, 0)
             elif isinstance(module, nn.BatchNorm2d):
-                nn.init.constant_(module.weight, 1)
-                nn.init.constant_(module.bias, 0)
+                nn.init.constant_(module.weight.data, 1)
+                nn.init.constant_(module.bias.data, 0)
+                nn.init.constant_(module.running_mean.data, 0)
+                nn.init.constant_(module.running_var.data, 0)
         
     def forward(self, input, *args, **kwargs):
         """FPN forward"""

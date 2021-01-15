@@ -120,7 +120,7 @@ def build_from_config(register, config):
     if isinstance(config.ARGS, CN):
         return module(config.ARGS)
     elif isinstance(config.ARGS, list):
-        return module(**config.ARGS[0])
+        return module(*config.ARGS[0], **config.ARGS[1])
     else:
         raise TypeError('{} must be a yacs.config.CfgNode or list,'
             ' but got {}'.format(config.ARGS, type(config.ARGS)))

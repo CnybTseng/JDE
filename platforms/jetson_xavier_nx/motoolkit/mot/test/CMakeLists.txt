@@ -4,7 +4,9 @@ add_executable(jde-test jde-test.cpp ${libsrcs})
 add_dependencies(jde-test motplugin)
 target_link_libraries(
     jde-test
+    libopencv_dnn.a
     libopencv_video.a
+    libopencv_imgcodecs.a
     libopencv_imgproc.a
     libopencv_core.a
     libade.a
@@ -24,6 +26,20 @@ target_link_libraries(
     -lpthread
     -ldl
     -lz
+    -lgstreamer-1.0
+    -lgobject-2.0
+    -lgstsdp-1.0
+    -lglib-2.0
+    -ldc1394
+    -ljpeg
+    -lpng
+    -lpng16
+    -ltiff
+    -lgstapp
+    -lgstapp-1.0
+    -lgstriff-1.0
+    -lgstencoding
+    -lgstpbutils-1.0
 )
 
 add_executable(mot-test mot-test.cpp)
@@ -47,7 +63,6 @@ target_link_libraries(
     -lx264
     -lpthread
     -ldl
-    -lpng
     -lz
     -lgstreamer-1.0
     -lgobject-2.0

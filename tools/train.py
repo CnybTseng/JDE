@@ -1,8 +1,12 @@
 import os
+import sys
 import torch
 import argparse
-from mot.utils import config
+sys.path.append(os.getcwd())
+from mot.utils import config, mkdirs
 from mot.models import build_tracker
+from mot.datasets import build_dataset
+from mot.apis import train_tracker
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -14,26 +18,25 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    # Parse configurations.
     args = parse_args()
     if os.path.isfile(args.config):
         config.merge_from_file(args.config)
     config.merge_from_list(args.opts)
-    config.freeze()
-    print(config)
     
+    torch.backends.cudnn.benchmark = True
+    mkdirs(config.SYSTEM.TASK_DIR)
+    
+    # Build dataset
+    dataset = build_dataset(config.DATASET)
+    
+    # Build model.
+    num_ide = int(dataset.max_id + 1)
+    config.MODEL.ARGS.HEAD.ARGS[1]['num_ide'] = num_ide
     model = build_tracker(config.MODEL)
-    print(model)
-    
-    input = torch.rand(64, 3, 320, 576)
-    target = torch.rand(1000, 7)
-    target[:, 0] = torch.randint(0, 64, (1000,))     # Image index
-    target[:, 1] = 0                        # Class index
-    target[:, 2] = torch.randint(0, 100, (1000,))    # Trajectory index
-    loss, metrics = model(input, target, [320, 576])
-    print('loss: {}'.format(loss))
-    print('metrics:')
-    for k, v in metrics.items():
-        print('{}: {}'.format(k, v))
+   
+    # Train tracker now.
+    train_tracker(model, dataset, config)
     
 if __name__ == '__main__':
     main()

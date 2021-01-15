@@ -22,6 +22,7 @@
 #include "config.h"
 #include "logger.h"
 #include "jdecoderv2.h"
+#include "calibration.h"
 
 #define RUN_BACKBONE_ONLY 0
 #define USE_ONNX_PARSER 0
@@ -426,7 +427,29 @@ bool JDE::create_network_from_scratch(void)
 #endif  // RUN_BACKBONE_ONLY
     builder->setMaxBatchSize(1);
     config->setMaxWorkspaceSize(10_MiB);
-    
+#if defined(USE_FP16) || defined(USE_INT8)  // Use FP16 or FP32 (rollback).
+    if (builder->platformHasFastFp16()) {
+        config->setFlag(nvinfer1::BuilderFlag::kFP16);
+    } else {
+        std::cerr << "The platform do not support FP16" << std::endl;
+        exit(0);
+    }
+#ifdef USE_INT8 // Use INT8 or FP16 (rollback) or FP32 (rollback), almost optimal.
+    if (builder->platformHasFastInt8()) {
+        config->setFlag(nvinfer1::BuilderFlag::kINT8);
+        const char *imdir = "./calibration/";
+        const DimsX dim = nvinfer1::Dims{4, {1, 3, INPUT_HEIGHT, INPUT_WIDTH}, {}};
+        const char *caltabname = "jde_int8_calib.table";
+        Int8EntropyCalibrator2 *calibrator = new Int8EntropyCalibrator2(
+            imdir, dim, INPUT_BLOB_NAME, caltabname);
+        config->setInt8Calibrator(calibrator);
+    } else {
+        std::cerr << "The platform do not support INT8" << std::endl;
+        exit(0);
+    }
+#endif
+#endif
+   
     engine = builder->buildEngineWithConfig(*network, *config);
     
     // 序列化模型并保存为TRT文件
@@ -654,12 +677,18 @@ nvinfer1::ILayer* addShuffleNetV2Block(
         auto shuf2 = network->addShuffle(*shuf1->getOutput(0));
         // ACE,BDF -> ACEBDF
         shuf2->setReshapeDimensions(dims);
-        
+#if USE_CHUNK_PLUGIN        
         // 创建Chunk插件
         const int32_t num_inputs = 1;
         nvinfer1::ITensor* inputs[] = {shuf2->getOutput(0)};        
         dims = inputs[0]->getDimensions();
-        int32_t chunkSize = sizeof(float) * (dims.d[0] * dims.d[1] * dims.d[2] * dims.d[3]) >> 1;
+        int32_t chunkSize = (dims.d[0] * dims.d[1] * dims.d[2] * dims.d[3]) >> 1;
+        if (inputs[0]->getType() == nvinfer1::DataType::kFLOAT) {
+            chunkSize *= 4;
+        } else if (inputs[0]->getType() == nvinfer1::DataType::kHALF) {
+            chunkSize *= 2;
+        }
+
         auto creator = getPluginRegistry()->getPluginCreator("Chunk", "100");
         nvinfer1::PluginField pluginField[1];
         pluginField[0] = nvinfer1::PluginField("chunkSize", &chunkSize, nvinfer1::PluginFieldType::kINT32);
@@ -673,6 +702,19 @@ nvinfer1::ILayer* addShuffleNetV2Block(
         chunk->setName((layer_name + ".chunk").c_str());
         x1 = chunk->getOutput(0);
         x2 = chunk->getOutput(1);
+#else
+        dims = shuf2->getOutput(0)->getDimensions();
+        nvinfer1::ISliceLayer *slice1 = network->addSlice(*shuf2->getOutput(0),
+            nvinfer1::Dims4{0, 0, 0, 0},
+            nvinfer1::Dims4{dims.d[0], dims.d[1] / 2, dims.d[2], dims.d[3]},
+            nvinfer1::Dims4{0, 1, 1, 1});
+        nvinfer1::ISliceLayer *slice2 = network->addSlice(*shuf2->getOutput(0),
+            nvinfer1::Dims4{0, dims.d[1] / 2, 0, 0},
+            nvinfer1::Dims4{dims.d[0], dims.d[1] / 2, dims.d[2], dims.d[3]},
+            nvinfer1::Dims4{0, 1, 1, 1});
+        x1 = slice1->getOutput(0);
+        x2 = slice2->getOutput(0);
+#endif
     }
 
     // 主分支的层

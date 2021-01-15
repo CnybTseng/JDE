@@ -1,151 +1,13 @@
 import os
-import cv2
-import glob
+import torch
 import numpy as np
 from collections import OrderedDict
-import torch.nn.functional as F
-import sys
-import torch
-import utils
-import transforms as T
-from xxx import LoadImagesAndLabels
+from torch.utils.data import Dataset
+from mot.datasets.builder import DATASETS
+from mot.datasets.transforms import LoadImagesAndLabels
 
-def letterbox_image(im, insize=(320,576,3), border=128):
-    '''生成letterbox图像
-    
-    Args:
-        im (ndarray): RGB/BGR格式图像
-        insize (tuple, optional): 神经网络输入大小, insize=(height, width,
-            channels)
-        border (float, optional): 图像边沿填充颜色
-    Returns:
-        lb_im (ndarray): letterbox图像
-        s (float): 图像缩放系数
-        dx (int): 非填充区域的水平偏移量
-        dy (int): 非填充区域的垂直偏移量
-    '''
-    h, w = im.shape[:2]
-    s = min(insize[0] / h, insize[1] / w)
-    nh = round(s * h)
-    nw = round(s * w)
-    dx = (insize[1] - nw) / 2
-    dy = (insize[0] - nh) / 2
-    left  = round(dx - 0.1)
-    right = round(dx + 0.1)
-    above = round(dy - 0.1)
-    below = round(dy + 0.1)
-    lb_im = np.full(insize, border, dtype=np.uint8)
-    lb_im[above:above+nh, left:left+nw, :] = cv2.resize(im, (nw,nh), interpolation=
-        cv2.INTER_AREA)
-    return lb_im, s, dx, dy
-
-class ImagesLoader(object):
-    '''图像迭代器
-    
-    Args:
-        path (str): 图像路径
-        insize (tuple): 神经网络输入大小, insize=(height, width)
-        formats (list of str): 需要解码的图像格式列表
-    '''
-    def __init__(self, path, insize, formats=['*.jpg'], backbone='shufflenetv2'):
-        if os.path.isdir(path):
-            self.files = []
-            for format in formats:
-                self.files += sorted(glob.glob(os.path.join(path, format)))
-        elif os.path.isfile(path):
-            self.files = [path]
-        self.insize = insize
-        self.count = 0
-        self.backbone = backbone
-
-    def __iter__(self):
-        self.count = -1
-        return self
-    
-    def __next__(self):
-        self.count += 1
-        if self.count == len(self.files):
-            raise StopIteration
-        path = self.files[self.count]
-        im = cv2.imread(path)
-        assert im is not None, 'cv2.imread{} fail'.format(path)
-        lb_im, s, dx, dy = letterbox_image(im, insize=self.insize)
-        if self.backbone is 'darknet':
-            lb_im = lb_im[...,::-1].transpose(2, 0, 1)
-            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
-            lb_im /= 255.0
-        else:
-            lb_im = lb_im.transpose(2, 0, 1)
-            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
-        return path, im, lb_im
-
-class VideoLoader(object):
-    '''Video frame iterator.
-    
-    Params
-    ------
-    path    : The file path for video.
-    insize  : The input size of neural network.
-    backbone: The backbone architecture. It can be 'darknet' or 'shufflenetv2'.
-    '''
-    def __init__(self, path, insize, backbone='shufflenetv2'):
-        if not os.path.isfile(path):
-            raise FileExistsError
-        self.vcap = cv2.VideoCapture(path)
-        self.frames = int(self.vcap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.insize = insize
-        self.backbone = backbone
-        self.count = 0
-    
-    def __iter__(self):
-        self.count = -1
-        return self
-    
-    def __next__(self):
-        self.count += 1
-        if self.count == len(self):
-            raise StopIteration
-        retval, im = self.vcap.read()
-        assert im is not None, 'VideoCapture.read() fail'
-        lb_im, s, dx, dy = letterbox_image(im, insize=self.insize)
-        if self.backbone is 'darknet':
-            lb_im = lb_im[...,::-1].transpose(2, 0, 1)
-            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
-            lb_im /= 255.0
-        else:
-            lb_im = lb_im.transpose(2, 0, 1)
-            lb_im = np.ascontiguousarray(lb_im, dtype=np.float32)
-        # Keep consistency with ImagesLoader with fake path.
-        path = '%06d.jpg' % self.count
-        return path, im, lb_im
-    
-    def __len__(self):
-        return self.frames
-
-def get_transform(train, net_w=416, net_h=416):
-    transforms = []
-    transforms.append(T.ToTensor())
-    if train == True:
-        transforms.append(T.RandomSpatialJitter(jitter=0.3,net_w=net_w,net_h=net_h))
-        transforms.append(T.RandomColorJitter(hue=0.1,saturation=1.5,exposure=1.5))
-        transforms.append(T.RandomHorizontalFlip(prob=0.5))
-    else:
-        transforms.append(T.MakeLetterBoxImage(width=net_w,height=net_h))
-    return T.Compose(transforms)
-
-def collate_fn(batch, in_size=torch.IntTensor([320,576])):
-    images, targets = [], []
-    for i,b in enumerate(batch):
-        image, target = b[0], b[1]
-        target[:,0] = i
-        images.append(image)
-        targets.append(target)
-    images = torch.stack(tensors=images, dim=0)
-    images = F.interpolate(input=images, size=in_size.numpy().tolist(), mode='area')
-    targets = torch.cat(tensors=targets, dim=0)
-    return images, targets
-
-class HotchpotchDataset(object):
+@DATASETS.register_module()
+class HotchpotchDataset(Dataset):
     '''Hotchpotch dataset for Caltech, Citypersons, CUHK-SYSU, ETHZ, PRW, MOT, and so on.
     '''
     def __init__(self, root, cfg='train.txt', backbone='shufflenetv2', augment=True):
@@ -278,10 +140,3 @@ class HotchpotchDataset(object):
     @property
     def max_id(self):
         return self._max_id
-
-if __name__ == '__main__':
-    dataset = HotchpotchDataset('/data/tseng/dataset/jde', './data/train.txt')
-    acc_ims = [0, 26738, 29238, 40444, 42500, dataset.__len__()]
-    for i in range(len(acc_ims) - 1):
-        image, targets = dataset.__getitem__(np.random.randint(acc_ims[i], acc_ims[i + 1]))
-        print(targets)
