@@ -13,16 +13,19 @@ _C.SYSTEM.TASK_DIR = './tasks/'
 _C.SYSTEM.RESUME = False
 _C.SYSTEM.LOG_INTERVAL = 40
 _C.SYSTEM.MODEL_SAVE_INTERVAL = 2
+_C.SYSTEM.REPORT_INTERVAL = 10
+_C.SYSTEM.REPORT_ARGS = ''
 
 _C.DATASET = CN()
 _C.DATASET.NAME = "HotchpotchDataset"
 _C.DATASET.ARGS = [["/data/tseng/dataset/jde"],
     {'cfg': './data/train.txt', 'backbone': 'shufflenetv2', 'augment': True}]
 
-_C.TRANSFORM = CN()
-_C.TRANSFORM.COLLATE = CN()
-_C.TRANSFORM.COLLATE.NAME = "TrackerCollate"
-_C.TRANSFORM.COLLATE.ARGS = [[], {'multiscale': False}]
+_C.DATALOADER = CN()
+_C.DATALOADER.COLLATE = CN()
+_C.DATALOADER.COLLATE.NAME = "TrackerCollate"
+_C.DATALOADER.COLLATE.ARGS = [[], {'multiscale': False}]
+_C.DATALOADER.SHUFFLE = True
 
 _C.MODEL = CN()
 _C.MODEL.NAME = "JDE"

@@ -575,26 +575,7 @@ def save_trajectories(path, trajectories, frame_id):
         file.close()
 
 def main(args):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # if args.backbone == 'darknet':
-    #     model = darknet.DarkNet(np.random.randint(0, 100, (12, 2))).to(device)
-    # elif args.backbone == 'shufflenetv2':
-    #     model = shufflenetv2.ShuffleNetV2(np.random.randint(0, 100, (12, 2)),
-    #         model_size=args.thin).to(device)
-    # else:
-    #     print('unknown backbone architecture!')
-    #     sys.exit(0)
-    # 
-    # # load state dict except the classifier layer
-    # model_dict = model.state_dict()
-    # trained_model_dict = torch.load(os.path.join(args.model), map_location='cpu')
-    # trained_model_dict = {k : v for (k, v) in trained_model_dict.items() if k in model_dict}
-    # trained_model_dict = collections.OrderedDict(trained_model_dict)
-    # model_dict.update(trained_model_dict)
-    # model.load_state_dict(model_dict)
-    # 
-    # model.eval()
-    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')    
     if os.path.isfile(args.config):
         config.merge_from_file(args.config)
     config.freeze()
@@ -604,21 +585,7 @@ def main(args):
         model.load_state_dict(torch.load(args.model, map_location='cpu'))
     model.cuda().eval()
 
-    # if '320x576' in args.insize:
-    #     anchors = ((6,16),   (8,23),    (11,32),   (16,45),
-    #                (21,64),  (30,90),   (43,128),  (60,180),
-    #                (85,255), (120,360), (170,420), (340,320))
-    # elif '480x864' in args.insize:
-    #     anchors = ((6,19),    (9,27),    (13,38),   (18,54),
-    #                (25,76),   (36,107),  (51,152),  (71,215),
-    #                (102,305), (143,429), (203,508), (407,508))
-    # elif '608x1088' in args.insize:
-    #     anchors = ((8,24),    (11,34),   (16,48),   (23,68),
-    #                (32,96),   (45,135),  (64,192),  (90,271),
-    #                (128,384), (180,540), (256,640), (512,640))
-
     h, w = [int(s) for s in args.insize.split('x')]
-    # decoder = jde.JDEcoder((h, w), embd_dim=args.embedding)
     tracker = JDETracker()
     if os.path.isfile(args.img_path):
         dataloader = dataset.VideoLoader(args.img_path, (h,w,3))
@@ -635,7 +602,6 @@ def main(args):
         input = torch.from_numpy(lb_im).unsqueeze(0).to(device)
         with torch.no_grad():
             outputs = model(input)
-        # outputs = decoder(outputs)
         print('{} {} {} {}'.format(path, im.shape, lb_im.shape, outputs.size()), end=' ')
         outputs =  nonmax_suppression(outputs, args.score_thresh, args.iou_thresh)[0]
         

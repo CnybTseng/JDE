@@ -1,8 +1,13 @@
 SYSTEM:
-    TASK_DIR: ./tasks/
+    TASK_DIR: ./tasks/20210123B
+    RESUME: True
 
 DATASET:
-    ARGS: [["/data/tseng/dataset/jde"], {'cfg': './data/train-mot16.txt', 'backbone': 'shufflenetv2', 'augment': True}]
+    NAME: DBSHotchpotchDataset
+    ARGS: [["/data/tseng/dataset/jde"], {'cfg': './data/train-substation.txt', 'backbone': 'shufflenetv2', 'augment': True}]
+
+DATALOADER:
+    SHUFFLE: False
 
 MODEL:
     ARGS:
@@ -19,9 +24,6 @@ MODEL:
             ARGS: [[], {'in_channels': [116, 232, 464]}]
 
 SOLVER:
-    WARMUP: 200
-    EPOCHS: 30
-    OPTIM:
-        ARGS: [[], {'lr': 0.0025, 'momentum': 0.9, 'weight_decay': 0.0001}]
+    EPOCHS: 300
     LR_SCHEDULER:
-        ARGS: [[[15, 22]], {'gamma': 0.1}]
+        ARGS: [[[100, 150]], {'gamma': 0.1}]

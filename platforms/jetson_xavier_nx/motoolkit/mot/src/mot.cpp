@@ -330,28 +330,25 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
         else
         //    riter = result.erase(riter);
         {
-            MOT_Rect rect = {0, 0, 0, 0};
+            // std::deque<mot::MOT_Rect>::iterator iter;
+            // for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
+            // {
+            //     if (iter->left > 0 || iter->right > 0 || iter->top > 0 || iter->bottom > 0)
+            //     {
+            //         MOT_Rect rect = {0, 0, 0, 0};   // Mark lost, be history.
+            //         riter->rects.push_front(rect);
+            //         if (riter->rects.size() > model.traj_cache_len)
+            //             riter->rects.pop_back();
+            //     }
+            //     break;
+            // }
+            
+            MOT_Rect rect = {0, 0, 0, 0};   // Mark lost, be history.
             riter->rects.push_front(rect);
             if (riter->rects.size() > model.traj_cache_len)
                 riter->rects.pop_back();
-            bool valid = false;
-            std::deque<mot::MOT_Rect>::iterator iter;
-            for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
-            {
-                if (iter->left > 0 || iter->right > 0 || iter->top > 0 || iter->bottom > 0)
-                {
-                    valid = true;
-                    break;
-                }
-            }
-            if (valid)
-            {
-                riter++;
-            }
-            else
-            {
-                riter = result.erase(riter);
-            }
+
+            riter++;
         }
     }
     
@@ -366,9 +363,7 @@ int forward_mot_model(const unsigned char *data, int width, int height, int stri
         MOT_Track track = {
             .identifier = tracks[i].id,
             .category = std::string(model.categories[0])};
-        // track.rects.resize(model.traj_cache_len);
         track.rects.push_front(rect);
-        // track.rects.pop_back();
         result.push_back(track);
     }
 #if PROFILE    

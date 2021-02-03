@@ -1,0 +1,2 @@
+Minimal modification Towards-Realtime-MOT for calculating CLEAR metrics on mot16 training dataset, and comparing the result with vanilla JDE.
+The code repository: https://github.com/CnybTseng/Towards-Realtime-MOT.git

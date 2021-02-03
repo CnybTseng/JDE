@@ -236,8 +236,8 @@ class ShuffleNetV2(torch.nn.Module):
         outputs.append(torch.cat(tensors=[y, z], dim=1))
         
         # YOLO2
-        _, _, h, w = conv5_out.size()
-        x = F.interpolate(input=conv5_out, size=(h*2, w*2), mode='nearest')
+        _, _, h, w = stage3_out.size()
+        x = F.interpolate(input=conv5_out, size=(h, w), mode='nearest')
         x = torch.cat(tensors=[stage3_out, x], dim=1)
         conv10_out = self.conv10(x)
         x = self.shbk11(conv10_out)
@@ -247,8 +247,8 @@ class ShuffleNetV2(torch.nn.Module):
         outputs.append(torch.cat(tensors=[y, z], dim=1))
         
         # YOLO3
-        _, _, h, w = conv10_out.size()
-        x = F.interpolate(input=conv10_out, size=(h*2, w*2), mode='nearest')
+        _, _, h, w = stage2_out.size()
+        x = F.interpolate(input=conv10_out, size=(h, w), mode='nearest')
         x = torch.cat(tensors=[stage2_out, x], dim=1)
         conv15_out = self.conv15(x)
         x = self.shbk16(conv15_out)

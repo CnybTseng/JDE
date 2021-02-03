@@ -1,6 +1,0 @@
-./data/caltech.train    
-./data/citypersons.train
-./data/cuhksysu.train   
-./data/eth.train
-./data/mot17.train             
-./data/prw.train        

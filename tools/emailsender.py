@@ -26,7 +26,7 @@ def parse_args():
         default='AI Server',
         help='E-mail subject')
     parser.add_argument('--text', '-t', type=str,
-        default='All work have been done. Check the result please!',
+        default='All works have been done. Check the result please!',
         help='E-mail content')
     parser.add_argument('--image', '-i', type=str, nargs='+',
         help='Image list to be attached.')
@@ -37,9 +37,11 @@ def parse_args():
 if __name__ == '__main__':
     args = parse_args()
     
-    mail_host = "smtp.qq.com"
+    mail_host = args.host
     mail_sender = args.sender[1]
     mail_license = args.license
+    if args.receiver is None:
+        args.receiver = args.sender
     mail_receivers = [args.receiver[1]]
 
     mm = MIMEMultipart('related')

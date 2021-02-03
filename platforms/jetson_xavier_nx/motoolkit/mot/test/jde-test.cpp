@@ -56,8 +56,7 @@ int main(int argc, char *argv[])
         }
 
         auto end = std::chrono::high_resolution_clock::now();
-        latency = std::chrono::duration<float, std::milli>(end - start).count();
-        std::cout << "latency is " << latency << "ms" << std::endl;
+        latency += std::chrono::duration<float, std::milli>(end - start).count();
 
         // Saving output for comparing with pytorch baseline
         if (0 == i) {
@@ -70,6 +69,7 @@ int main(int argc, char *argv[])
         }
     }   
     
+    std::cout << "latency is " << latency / loops << "ms" << std::endl;
     status = mot::JDE::instance()->destroy();
     if (!status) {
         std::cout << "destroy JDE fail" << std::endl;

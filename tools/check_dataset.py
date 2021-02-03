@@ -33,8 +33,10 @@ for n, im_path in enumerate(im_paths):
         y *= image.shape[0]
         w *= image.shape[1]
         h *= image.shape[0]
+        np.random.seed(int(i))
+        color = np.random.randint(0, 256, size=(3,)).tolist()
         rect = np.array([x - w / 2, y - h / 2, w, h])
-        image = cv2.rectangle(image, rect, (0,255,255))
+        image = cv2.rectangle(image, rect, color)
     if writer is None:
         size = (image.shape[1], image.shape[0])
         writer = cv2.VideoWriter('check.avi', cv2.VideoWriter_fourcc('M','J','P','G'), 20, size)

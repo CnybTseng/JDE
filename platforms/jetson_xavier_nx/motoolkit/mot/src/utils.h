@@ -27,7 +27,7 @@
 #define INTEGRATES_DECODER 0    
 #endif
 
-#define USE_INT8                    //! USE_FP32 or USE_FP16 or USE_INT8
+#define USE_FP16                    //! USE_FP32 or USE_FP16 or USE_INT8
 
 #define USE_CHUNK_PLUGIN 0
 

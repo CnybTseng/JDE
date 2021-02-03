@@ -1,8 +1,10 @@
 import xlwt
+import warnings
+import os.path as osp
 from xlrd import open_workbook
 from xlutils.copy import copy
 
-def build_excel(filename, head, sheetname):
+def build_excel(filename, head, sheetname, override=True):
     '''Build a new .xls file.
     
     Param
@@ -10,6 +12,11 @@ def build_excel(filename, head, sheetname):
     filename: Filename of .xls to be built.
     head    : The table head of .xls.
     '''
+    if osp.isfile(filename):
+        if override:
+            warnings.warn('{} will be overrided'.format(filename))
+        else:
+            return
     wb = xlwt.Workbook()
     sh = wb.add_sheet(sheetname)
     for i, h in enumerate(head):

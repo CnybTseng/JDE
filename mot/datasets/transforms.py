@@ -19,11 +19,13 @@ def xyxy2xywh(x):
 
 class LoadImagesAndLabels:  # for training
     def __init__(self, img_size=(320,576),  augment=True,
-        transforms=T.Compose([T.ToTensor()])):
+        transforms=T.Compose([T.ToTensor()]),
+        scale=(0.50, 1.20)):
         self.width = img_size[1]
         self.height = img_size[0]
         self.augment = augment
         self.transforms = transforms
+        self.scale = scale
 
     def get_data(self, img_path, label_path):
         height = self.height
@@ -71,7 +73,7 @@ class LoadImagesAndLabels:  # for training
 
         # Augment image and labels
         if self.augment:
-            img, labels, M = random_affine(img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=(0.50, 1.20))
+            img, labels, M = random_affine(img, labels, degrees=(-5, 5), translate=(0.10, 0.10), scale=self.scale)
 
     
         plotFlag = False
@@ -126,7 +128,7 @@ def letterbox(img, height=608, width=1088, color=(127.5, 127.5, 127.5)):  # resi
     return img, ratio, dw, dh
 
 
-def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scale=(.5, 1.1), shear=(-2, 2),
+def random_affine(img, targets=None, degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-2, 2),
                   borderValue=(127.5, 127.5, 127.5)):
     # torchvision.transforms.RandomAffine(degrees=(-10, 10), translate=(.1, .1), scale=(.9, 1.1), shear=(-10, 10))
     # https://medium.com/uruvideo/dataset-augmentation-with-random-homographies-a8f4b44830d4

@@ -9,9 +9,8 @@ parser.add_argument('--data-root', '-dr', type=str,
     help='dataset root directory')
 parser.add_argument('--model-path', '-mp', type=str,
     help='path to model candidates')
-parser.add_argument('--analyser-path', '-ap', type=str,
-    default='/data/tseng/project/thirdparty/Towards-Realtime-MOT',
-    help='path to Towards-Realtime-MOT package')
+parser.add_argument('--version', type=str, default='2.0',
+    help='lightweight JDE version, 1.0 or 2.0')
 parser.add_argument('--save-path', '-sp', type=str,
     default='./model_performance',
     help='path to the result')
@@ -19,7 +18,6 @@ args = parser.parse_args()
 print(args)
 
 sys.path.append(os.getcwd())
-sys.path.append(args.analyser_path)
 if os.path.isfile(args.model_path):
     paths = [args.model_path]
 else:
@@ -34,10 +32,10 @@ for path in paths:
     if not os.path.exists(rpath):
         os.makedirs(rpath)
 
-    os.system('cd {} && python track.py'
-        ' --cfg cfg/yolov3_576x320.cfg'
-        ' --weights {}'
-        ' --test-mot16'.format(args.analyser_path, path))
+    os.system('python 3rdparty/Towards-Realtime-MOT/track.py'
+        ' --cfg 3rdparty/Towards-Realtime-MOT/cfg/yolov3_576x320.cfg'
+        ' --weights {} --test-mot16 --data-root {} --version {}'.format(
+        path, args.data_root, args.version))
     
     exp_name = path.split('/')[-2]
     results = os.path.join(args.data_root, '..', 'results', exp_name, '*')

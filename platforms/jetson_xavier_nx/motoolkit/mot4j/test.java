@@ -50,6 +50,12 @@ public class test
             max_frames = Integer.parseInt(argv[2]);
         }
         
+        int reset = 1;
+        if (argv.length >= 4)
+        {
+            reset = Integer.parseInt(argv[3]);
+        }
+        
         // 1. 加载模型
         mot4j handle = new mot4j();
         if (0 != handle.load_mot_model(argv[0]))
@@ -130,6 +136,25 @@ public class test
                     catch (Exception e)
                     {
                         System.err.println("store tracks fail\n");
+                    }
+                    
+                    String totals = handle.get_total_tracks(reset);
+                    try
+                    {
+                        JSONArray array2 = new JSONArray(totals);
+                        String filename2 = String.format("./tracklet/%06d.json", timestamp);
+                        try (FileWriter writer = new FileWriter(filename2))
+                        {
+                            writer.write(totals);
+                        }
+                        catch (Exception e)
+                        {
+                            System.err.println("store tracks fail\n");
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        ;
                     }
                 }
             }

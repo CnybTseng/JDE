@@ -13,7 +13,7 @@ def build_collate(config):
     return build_from_config(COLLATES, config)
 
 def build_dataloader(dataset, config):
-    collate_class = build_collate(config.TRANSFORM.COLLATE)
+    collate_class = build_collate(config.DATALOADER.COLLATE)
     args, kwargs = [], {}
     # if collate_class.multiscale:
     init_size = np.array([config.MODEL.ARGS.INPUT.HEIGHT,
@@ -23,6 +23,7 @@ def build_dataloader(dataset, config):
     collate_fn = collate_class(*args, **kwargs)
     dataloader = DataLoader(dataset,
         batch_size=config.SOLVER.BATCH_SIZE,
-        shuffle=True, num_workers=config.SYSTEM.NUM_WORKERS,
+        shuffle=config.DATALOADER.SHUFFLE,
+        num_workers=config.SYSTEM.NUM_WORKERS,
         collate_fn=collate_fn, pin_memory=True, drop_last=True)
     return dataloader

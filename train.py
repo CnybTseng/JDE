@@ -19,7 +19,6 @@ import utils
 import darknet
 import dataset as ds
 import shufflenetv2
-import sosmot
 
 def parse_args():
     parser = argparse.ArgumentParser()

@@ -1,12 +1,6 @@
-file(GLOB_RECURSE libgpusrcs ${CMAKE_CURRENT_SOURCE_DIR}/cuda/*.cu)
-
-cuda_add_library(motplugin STATIC ${libgpusrcs})
-target_link_libraries(motplugin -lnvinfer -lnvinfer_plugin -lcudart)
-
-add_library(mot SHARED ${libsrcs})
-add_dependencies(mot motplugin)
+add_library(reid SHARED ${LIBSRCS})
 target_link_libraries(
-    mot
+    reid
     libopencv_video.a
     libopencv_imgproc.a
     libopencv_core.a
@@ -18,7 +12,6 @@ target_link_libraries(
     liblibwebp.a
     libquirc.a
     libtegra_hal.a
-    ${CMAKE_CURRENT_BINARY_DIR}/libmotplugin.a
     -lnvinfer
     -lnvonnxparser
     -lcudart
@@ -29,16 +22,15 @@ target_link_libraries(
     -lz
 )
 
-set_target_properties(mot PROPERTIES PUBLIC_HEADER "mot.h;config.h")
-install(TARGETS mot
+set_target_properties(reid PROPERTIES PUBLIC_HEADER "osnet.h")
+install(TARGETS reid
     LIBRARY DESTINATION lib
     PUBLIC_HEADER DESTINATION include
 )
 
-add_library(mot-static STATIC ${libsrcs})
-add_dependencies(mot-static motplugin)
+add_library(reid-static STATIC ${LIBSRCS})
 target_link_libraries(
-    mot-static
+    reid-static
     libopencv_dnn.a
     libopencv_video.a
     libopencv_imgcodecs.a
@@ -52,7 +44,6 @@ target_link_libraries(
     liblibwebp.a
     libquirc.a
     libtegra_hal.a
-    ${CMAKE_CURRENT_BINARY_DIR}/libmotplugin.a
     -lnvinfer
     -lnvonnxparser
     -lcudart
@@ -63,8 +54,8 @@ target_link_libraries(
     -lz
 )
 
-set_target_properties(mot-static PROPERTIES OUTPUT_NAME mot)
-install(TARGETS mot-static
+set_target_properties(reid-static PROPERTIES OUTPUT_NAME reid)
+install(TARGETS reid-static
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
 )

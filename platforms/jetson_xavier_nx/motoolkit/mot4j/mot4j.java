@@ -55,7 +55,19 @@ public class mot4j
      * @param width 图像宽度
      * @param height 图像高度
      * @param stride 图像扫描行字节步长
-     * @return 多目标跟踪结果, 为Json转换来的字符串
+     * @return 多目标跟踪结果, 为Json转换来的字符串. 轨迹坐标序列中的第一个点如果全零,
+     *         表示该条轨迹是历史轨迹.
      */
     public native String forward_mot_model(byte data[], int width, int height, int stride);
+    
+    /**
+     * @brief 定时获取所有轨迹.
+     * @warning 如果将reset设置为1, 所有的历史轨迹将被清空!!!
+     * @param reset 如果查询结果显示轨迹队列已满, 是否将其重置.
+     *        0, 不重置. 轨迹队列中的当前轨迹将以FIFO的方式更新.
+     *        1, 重置. 队列中的所有历史轨迹将被清空。
+     * @return
+     *        如果定时器溢出, 返回所有轨迹; 否则, 返回null.
+     */
+    public native String get_total_tracks(int reset);
 }

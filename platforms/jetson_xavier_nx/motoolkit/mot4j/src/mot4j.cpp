@@ -33,10 +33,14 @@
 #include <json/json.h>
 
 #include "mot.h"
+#include "config.h"
 #include "com_sihan_system_jni_utils_mot4j.h"
+
+#define MAX_TRACK_LEN 1000
 
 static std::mutex mtx;
 static std::map<std::thread::id, mot::MOT_Result> motres;
+static std::map<std::thread::id, unsigned long long> frame_counter;
 
 // This function is coming from kinson
 jstring charTojstring( JNIEnv* env,const char* str )
@@ -72,6 +76,8 @@ jstring charTojstring( JNIEnv* env,const char* str )
 JNIEXPORT jint JNICALL Java_com_sihan_system_jni_utils_mot4j_load_1mot_1model
   (JNIEnv *env, jobject obj, jstring cfg_path)
 {
+    std::thread::id tid = std::this_thread::get_id();
+    frame_counter[tid] = 0;
     std::string path = env->GetStringUTFChars(cfg_path, 0);
     return mot::load_mot_model(path.c_str());
 }
@@ -98,20 +104,15 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1mo
         std::cout << "invalid image data pointer" << std::endl;
         return charTojstring(env, "");
     }
-
+    
     std::thread::id tid = std::this_thread::get_id();
     mot::forward_mot_model((unsigned char *)jbgr, (int)width, (int)height, (int)stride, motres[tid]);  
     env->ReleaseByteArrayElements(data, jbgr, 0);
     
-    int i = 0;
+    int i = -1;
     std::vector<mot::MOT_Track>::iterator riter;
-    for (riter = motres[tid].begin(); riter != motres[tid].end(); riter++, ++i)
-    {
-        Json::Value rects;
-        result[i]["identifier"] = std::to_string(riter->identifier);
-        result[i]["category"] = "person";
-        result[i]["rects"] = rects;
-
+    for (riter = motres[tid].begin(); riter != motres[tid].end(); riter++)
+    {    
         int j = 0;
         std::deque<mot::MOT_Rect>::iterator iter;
         for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
@@ -120,18 +121,99 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1mo
             int t = static_cast<int>(round(iter->top));
             int w = static_cast<int>(round(iter->right - iter->left));
             int h = static_cast<int>(round(iter->bottom - iter->top));
-            // if (0 == l && 0 == t && 0 == w && 0 == h)
-            // {
-            //     continue;
-            // }
-
+            if (0 == j)
+            {
+                if (0 == l && 0 == t && 0 == w && 0 == h) // reject history track
+                    break;
+                else
+                {
+                    ++i;
+                    Json::Value rects;
+                    result[i]["identifier"] = std::to_string(riter->identifier);
+                    result[i]["category"] = "person";
+                    result[i]["rects"] = rects;
+                }
+            }
+            
             result[i]["rects"][j]["x"] = std::to_string(l);
             result[i]["rects"][j]["y"] = std::to_string(t);
             result[i]["rects"][j]["width"] = std::to_string(w);
             result[i]["rects"][j]["height"] = std::to_string(h);
             ++j;
+            if (j > MAX_TRACK_LEN)
+                break;
         }
     }
+    
+    frame_counter[tid]++; // accumulate frame number
+    return charTojstring(env, result.toStyledString().c_str());
+}
 
+//*********************************************************************
+// 定时获取所有轨迹
+//*********************************************************************
+JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_get_1total_1tracks
+  (JNIEnv *env, jobject obj, jint reset)
+{
+    Json::Value result;
+    std::thread::id tid = std::this_thread::get_id();
+    if (frame_counter[tid] >= mot::trajectory_len)
+    {
+        // get all tracks
+        int i = 0;
+        std::vector<mot::MOT_Track>::iterator riter;
+        for (riter = motres[tid].begin(); riter != motres[tid].end(); riter++, ++i)
+        {
+            Json::Value rects;
+            result[i]["identifier"] = std::to_string(riter->identifier);
+            result[i]["category"] = "person";
+            result[i]["rects"] = rects;
+        
+            int j = 0;
+            std::deque<mot::MOT_Rect>::iterator iter;
+            for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
+            {
+                int l = static_cast<int>(round(iter->left));
+                int t = static_cast<int>(round(iter->top));
+                int w = static_cast<int>(round(iter->right - iter->left));
+                int h = static_cast<int>(round(iter->bottom - iter->top));                
+                result[i]["rects"][j]["x"] = std::to_string(l);
+                result[i]["rects"][j]["y"] = std::to_string(t);
+                result[i]["rects"][j]["width"] = std::to_string(w);
+                result[i]["rects"][j]["height"] = std::to_string(h);
+                ++j;
+            }
+        }
+        
+        // reset track pool
+        if (1 == reset)
+        {
+            std::vector<mot::MOT_Track>::iterator riter;
+            for (riter = motres[tid].begin(); riter != motres[tid].end();)
+            {
+                bool history = false;
+                std::deque<mot::MOT_Rect>::iterator iter;
+                for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++)
+                {
+                    int l = static_cast<int>(round(iter->left));
+                    int t = static_cast<int>(round(iter->top));
+                    int w = static_cast<int>(round(iter->right - iter->left));
+                    int h = static_cast<int>(round(iter->bottom - iter->top));
+                    if (iter == riter->rects.begin() &&
+                        0 == l && 0 == t && 0 == w && 0 == h)
+                    {
+                        history = true;
+                        break;
+                    }
+                }
+                if (history)
+                    riter = motres[tid].erase(riter);
+                else
+                    ++riter;
+            }
+            frame_counter[tid] = 0; // reset frame frame_counter
+        }
+    }
+    
     return charTojstring(env, result.toStyledString().c_str());
 }

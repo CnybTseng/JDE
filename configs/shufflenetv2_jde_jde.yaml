@@ -1,8 +1,8 @@
 SYSTEM:
-    TASK_DIR: ./tasks/20210113A
+    TASK_DIR: ./tasks/
 
 DATASET:
-    ARGS: [["/data/tseng/dataset/jde"], {'cfg': './data/train.txt', 'backbone': 'shufflenetv2', 'augment': True}]
+    ARGS: [["/data/tseng/dataset/jde"], {'cfg': './data/train-jde.txt', 'backbone': 'shufflenetv2', 'augment': True}]
 
 MODEL:
     ARGS:
