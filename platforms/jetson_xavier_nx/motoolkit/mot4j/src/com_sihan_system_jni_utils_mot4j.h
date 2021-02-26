@@ -26,18 +26,18 @@ JNIEXPORT jint JNICALL Java_com_sihan_system_jni_utils_mot4j_unload_1mot_1model
 /*
  * Class:     com_sihan_system_jni_utils_mot4j
  * Method:    forward_mot_model
- * Signature: ([BIII)Ljava/lang/String;
+ * Signature: ([BIIII)Ljava/lang/String;
  */
 JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1model
-  (JNIEnv *, jobject, jbyteArray, jint, jint, jint);
+  (JNIEnv *, jobject, jbyteArray, jint, jint, jint, jint);
 
 /*
  * Class:     com_sihan_system_jni_utils_mot4j
  * Method:    get_total_tracks
- * Signature: (I)Ljava/lang/String;
+ * Signature: (II)Ljava/lang/String;
  */
 JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_get_1total_1tracks
-  (JNIEnv *, jobject, jint);
+  (JNIEnv *, jobject, jint, jint);
 
 #ifdef __cplusplus
 }

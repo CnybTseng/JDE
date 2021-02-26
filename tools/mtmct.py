@@ -1,10 +1,12 @@
 import os
 import cv2
+import lap
 import sys
 import copy
 import math
 import time
 import torch
+import random
 import argparse
 import warnings
 import threading
@@ -15,6 +17,7 @@ from threading import Thread
 from multiprocessing import Value
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from scipy.spatial.distance import cdist
 from torchreid.utils import FeatureExtractor
 sys.path.append(os.getcwd())
 
@@ -118,14 +121,16 @@ class Datastore(Thread):
         print('exit thread {}.'.format(self.tid))
 
 class Tracklet:
-    def __init__(self, chan, id, box, im=None, location=None):
-        self.chan = chan    # channel index
-        self.id = id        # local tracklet index
+    """Local tracklet"""
+    def __init__(self, chan, id, box, im=None, location=None, fcount=0):
+        self.chan = chan    # channel number
+        self.id = id        # local tracklet identity
         self.box = box      # ltrb
         self.im = im        # clipped image
         self.feat = None    # ReID feature vector
         self.time = time.time()        # timestamp
         self.location = location       # ground plane location
+        self.fcount = fcount    # frame count
 
 class MTSCT(Thread):
     def __init__(self, tid, images, tracklets, exit, model,
@@ -135,7 +140,7 @@ class MTSCT(Thread):
         self.images = images
         self.tracklets = tracklets
         self.exit = exit
-        self.model = model.cuda()
+        self.model = model.cuda()   # Tracker model
         self.model.eval()
         self.locator = locator
         self.insize = insize
@@ -174,7 +179,7 @@ class MTSCT(Thread):
                     xf = (track.ltrb[0] + track.ltrb[2]) / 2
                     yf = track.ltrb[3]
                     location = self.locator((xf, yf))
-                    tracklet = Tracklet(self.tid, track.id, track.ltrb, im, location)
+                    tracklet = Tracklet(self.tid, track.id, track.ltrb, im, location, counter)
                     tracklets.append(tracklet)
                 resimg = trackernew.overlap_trajectory(tracks, raw_img)
             # Update tracklet queue.
@@ -193,12 +198,34 @@ class MTSCT(Thread):
         return copy.deepcopy(im[t : b + 1, l : r + 1, :])
 
 class Trajectory:
-    def __init__(self, id, location, time):
+    """Global trajectory"""
+    def __init__(self, id, tracklet):
         self.id = id
-        self.data = [{'location': location, 'time': time}]
+        if isinstance(tracklet, Tracklet):
+            self.data = [tracklet]
+            self.drew = [False]
+        elif isinstance(tracklet, list):
+            self.data = tracklet
+            self.drew = [False] * len(tracklet)
+        else:
+            raise TypeError('expect Tracklet or list type,'
+                ' but got {}'.format(type(tracklet)))
 
-    def append(self, location, time):
-        self.data.append({'location': location, 'time': time})
+    def append(self, tracklet):
+        if isinstance(tracklet, Tracklet):
+            self.data.append(tracklet)
+            self.drew.append(False)
+        elif isinstance(tracklet, list):
+            self.data += tracklet
+            self.drew += [False] * len(tracklet)
+        else:
+            raise TypeError('expect Tracklet or list type,'
+                ' but got {}'.format(type(tracklet)))
+    
+    def randel(self):
+        if len(self.data) > 1:
+            unlucky = random.randint(0, len(self.data) - 2)
+            del self.data[unlucky]
 
 class MTMCT(Thread):
     def __init__(self, tid, tracklets, trajectories, exit, model=None):
@@ -207,45 +234,47 @@ class MTMCT(Thread):
         self.tracklets = tracklets
         self.trajectories = trajectories
         self.exit = exit
-        self.model = model
+        self.model = model  # ReID model
         self.gplane = np.zeros((2048, 2048, 3), dtype=np.uint8)
         self.counter = 0
-        self.save_dir = osp.join('tasks', 'gplane')
-        mkdirs(self.save_dir)
-        self.global2local = defaultdict(defaultdict)
+        self.gplane_dir = osp.join('tasks', 'gplane')
+        mkdirs(self.gplane_dir)
+        self.local2global = defaultdict(int)    # `channel-local_id`
+        self.undetermined = defaultdict(lambda: defaultdict(list))    # `channel`->`local_id`
+        self.least = 5 # at least `least` tracklets for matching
+        self.atmost = 15    # at most `atmost` tracklets for matching
+        self.ncamera = 0
+        self.topk = 5
+        self.max_dist = 25
+        self.traj_dir = osp.join('tasks', 'trajectories')
+        mkdirs(self.traj_dir)
 
     def run(self):
         print('start thread {} ...'.format(self.tid))
         while self.exit.value == 0:
-            # Fetch tracklets from all cameras.
+            print('\n' * 3 + '>' * 32 + '{}'.format(self.counter))
+            # Fetch tracklets from all cameras synchronously.
             tracklets = self.fetch_tracklet()
             if tracklets is None:
                 print('fetch tracklet failed')
                 continue
-            tracklets = [t for t in tracklets if len(t) > 0]
-            # self.draw_all_tracklets(tracklets)
             # Extract ReID feature from clipped images.
             self.extract_feature(tracklets)
             # Init global trajectories if necessary.
             self.init_global_trajectory(tracklets)
-            # Look up local to global matching table.
-            self.try_direct_match(tracklets)
-            # Construct cost matrix.
-            
-            # Linear assignment trajectories
-            
-            # Update local to global matching table.
-            
-            # Init new global trajectories.
-
+            # Assign local tracklets to global trajectories.
+            self.local_to_global_match(tracklets)
             for i in range(len(self.tracklets)):
                 self.tracklets[i].task_done()
+            # self.draw_trajectory()  # debug
+            # self.save_trajectory()  # debug
+            self.overlap_global_identity()  # debug
+            self.print_trajectory() # debug
             self.counter += 1
-            self.draw_trajectories()
-            self.print_trajectory()
         print('exit thread {}.'.format(self.tid))
     
     def fetch_tracklet(self):
+        """Fetch tracklets from all channels"""
         tracklets = []
         for i in range(len(self.tracklets)):
             ntry = 10
@@ -264,63 +293,188 @@ class MTMCT(Thread):
         return tracklets
     
     def extract_feature(self, tracklets):
-        for tracklet in tracklets:  # one channel
+        """Extract embedding from cripped image"""
+        for tracklet in tracklets:
             for t in tracklet:
-                t.feat = self.model(t.im)
+                t.feat = self.model(t.im).detach().cpu().numpy().reshape(1, -1)
     
     def init_global_trajectory(self, tracklets):
+        """Initialize global trajectories"""
         if len(self.trajectories) > 0:
+            return False
+        for channel, tracklet in enumerate(tracklets):
+            for i, t in enumerate(tracklet):
+                id = i + 1  # global identity
+                self.trajectories.append(Trajectory(id, t))
+                self.update_match_table(t, id)
+            # Choose the first channel which contains local tracklet.
+            if len(self.trajectories) > 0:
+                tracklets[channel] = []   # no need for processing again
+                break
+        return True
+    
+    def update_match_table(self, tracklet, id):
+        """Update local2global table"""
+        key = '{}-{}'.format(tracklet.chan, tracklet.id)
+        mid = self.local2global.get(key, None)
+        if mid is None:
+            self.local2global[key] = id
+        else:
+            print('find the key `{}` exists!!!'.format(key))
+    
+    def local_to_global_match(self, tracklets):
+        """Assign local tracklet to global trajectory"""
+        for channel, tracklet in enumerate(tracklets):
+            # Look up local to global matching table.
+            matched = self.direct_match(channel, tracklet)
+            print('matched {}'.format(matched))
+            gallery = self.make_gallery(matched)
+            undetermined = self.make_undetermined(channel)
+            # Appearance distance matrix.
+            appr = self.calc_appr_dist(undetermined, gallery)
+            # Linear assignment trajectories
+            m, gum, lum = self.linear_assignment(appr, cost_limit=0.9)
+            # Update global trajectories and local2global table.
+            self.update_trajectory(gallery, undetermined, m)
+            # Build global trajectory.
+            self.build_trajectory(undetermined, lum)
+            # Clean undetermined items which have been processed.
+            self.clean_undermined(channel, undetermined)
+            print('undetermined{}: {}'.format(channel,
+                list(self.undetermined[channel].keys())))
+            print('-' * 32)
+        self.local2local_dist(tracklets)
+    
+    def make_gallery(self, exclude=[]):
+        """Make gallery set"""
+        gallery = []
+        for t in self.trajectories:
+            if t.id in exclude:
+                continue
+            # Require enough samples for each trajectory.
+            if len(t.data) < self.least:
+                continue
+            # Limit gallery set size.
+            k = min(len(t.data), self.atmost)
+            data = random.sample(t.data, k)
+            gallery.append({'id': t.id, 'data': data})
+        return gallery
+    
+    def make_undetermined(self, channel):
+        undetermined = {}
+        for k, v in self.undetermined[channel].items():
+            if len(v) >= self.least:
+                undetermined[k] = v
+        return undetermined
+    
+    def direct_match(self, channel, tracklets):
+        """Matching based on local2global table"""
+        matched = []
+        for t in tracklets:
+            mid = None
+            key = '{}-{}'.format(t.chan, t.id)
+            mid = self.local2global.get(key, None)
+            if mid is not None:
+                for k, gt in enumerate(self.trajectories):
+                    if gt.id == mid:
+                        print('direct assign {} to {}'.format(key, mid))
+                        self.trajectories[k].append(t)
+                        break
+                matched.append(mid)
+            else:
+                # Accumulate undetermined local tracklets.
+                self.undetermined[channel][t.id].append(t)
+                print('add undetermined {}'.format(key))
+        return matched
+    
+    def calc_appr_dist(self, undetermined, gallery):
+        """Calculate appearance distance"""
+        dists = []
+        for gt in gallery:
+            dist = []
+            for id, lt in undetermined.items():
+                # Distance between gallery and probe set.
+                d = []
+                for gti in gt['data']:
+                    for lti in lt:
+                        d.append(cdist(gti.feat, lti.feat))
+                d = np.mean(d).item()
+                dist.append(d)
+            dists.append(dist)
+        dists = np.array(dists)
+        if dists.size == 0:
+            return dists.reshape(0, 0)
+        # print('probe to gallery dists:\n{}'.format(dists))   
+        dists[dists > self.max_dist] = self.max_dist
+        dists /= self.max_dist
+        # print('norm dists:\n{}'.format(dists))
+        return dists
+    
+    def linear_assignment(self, cost, cost_limit):
+        matches = np.empty((0, 2), dtype=int)
+        mismatch_row = np.arange(cost.shape[0], dtype=int)
+        mismatch_col = np.arange(cost.shape[1], dtype=int)
+        if cost.size == 0:
+            return matches, mismatch_row, mismatch_col
+        
+        matches = []
+        opt, x, y = lap.lapjv(cost, extend_cost=True, cost_limit=cost_limit)
+        for i,xi in enumerate(x):
+            if xi >= 0:
+                matches.append([i, xi])
+        
+        matches = np.asarray(matches)
+        mismatch_row = np.where(x < 0)[0]
+        mismatch_col = np.where(y < 0)[0]
+        return matches, mismatch_row, mismatch_col
+
+    def update_trajectory(self, gallery, undetermined, m):
+        if m.size == 0:
             return
-        for tracklet in tracklets:  # one channel
-            for j, t in enumerate(tracklet):
-                id = j + 1  # global index
-                self.trajectories.append(
-                    Trajectory(id, t.location, t.time))
-                self.global2local[t.chan][id] = [t.id]
-            break
+        for i, (lid, lt) in enumerate(undetermined.items()):
+            j = np.where(m[:, 1] == i)[0]
+            if j.size == 0:
+                continue
+            j = m[j, 0].item() # Find the matched gallery item
+            for gt in self.trajectories:
+                if gt.id == gallery[j]['id']:
+                    gt.append(lt)
+                    self.update_match_table(lt[0], gt.id)
+                    print('add {}-{} to {}, length {}'.format(
+                        lt[0].chan, lt[0].id, gt.id, len(lt)))
+                    break
+            else:
+                print('impossible error happended!!!')
+
+    def build_trajectory(self, undetermined, lum):
+        """Build new trajectory from tracklet"""
+        for i, (lid, lt) in enumerate(undetermined.items()):
+            if i not in lum:    # local unmatched
+                continue
+            gid = self.trajectories[-1].id + 1   # global identity
+            self.trajectories.append(Trajectory(gid, lt))
+            self.update_match_table(lt[0], gid)
+            print('build trajectory {} from {}-{}'.format(
+                gid, lt[0].chan, lt[0].id))
+
+    def clean_undermined(self, channel, undetermined):
+        """Clean undetermined tracklets"""
+        for key in undetermined.keys():
+            self.undetermined[channel].pop(key, None)
     
-    def try_direct_match(self, tracklets):
-        if len(self.trajectories) <= 0:
-            return
-        for tracklet in tracklets:  # tracklets of a channel
-            for t in tracklet:
-                mid = None
-                if t.chan in self.global2local.keys():
-                    for id, assigns in self.global2local[t.chan].items():
-                        if t.id in assigns:
-                            mid = id
-                            break
-                if mid is not None:
-                    for k, gt in enumerate(self.trajectories):
-                        if gt.id == mid:
-                            self.trajectories[k].append(t.location, t.time)
-                            break
-                else:
-                    pass
+    def local2local_dist(self, tracklets):
+        dists = {}
+        for t1 in tracklets[0]:
+            for t2 in tracklets[1]:
+                key = '{}-{}:{}-{}'.format(t1.chan, t1.id, t2.chan, t2.id)
+                dists[key] = cdist(t1.feat, t2.feat).item()
+        print('local2local_dist:\n{}'.format(dists))
     
-    def draw_all_tracklets(self, tracklets):
-        radius = 5
-        self.gplane.fill(0)
-        for i, ti in enumerate(tracklets):
-            for j, tij in enumerate(ti):
-                xw, yw = tij.location
-                xw = np.clip(xw, -20000, 20000)
-                yw = np.clip(yw, -20000, 20000)
-                xi = (xw / 20000) * (self.gplane.shape[1] / 2) + \
-                    self.gplane.shape[1] / 2
-                yi = (yw / 20000) * (self.gplane.shape[0] / 2) + \
-                    self.gplane.shape[0] / 2
-                center = (int(xi), int(yi))
-                np.random.seed(tij.id + i * 10000)
-                color = np.random.randint(0, 256, size=(3,)).tolist()
-                cv2.circle(self.gplane, center, radius, color, cv2.FILLED)
-        cv2.imwrite(osp.join(self.save_dir, '%06d.png' % self.counter), self.gplane)
-    
-    def draw_trajectories(self):
-        radius = 5
+    def draw_trajectory(self):
+        radius = 2
         for trajectory in self.trajectories:
             for foot in trajectory.data:
-                xw, yw = foot['location']
+                xw, yw = foot.location
                 xw = np.clip(xw, -20000, 20000)
                 yw = np.clip(yw, -20000, 20000)
                 xi = (xw / 20000) * (self.gplane.shape[1] / 2) + \
@@ -331,13 +485,40 @@ class MTMCT(Thread):
                 np.random.seed(trajectory.id)
                 color = np.random.randint(0, 256, size=(3,)).tolist()
                 cv2.circle(self.gplane, center, radius, color, cv2.FILLED)
-        cv2.imwrite(osp.join(self.save_dir, '%06d.png' % self.counter), self.gplane)
+        cv2.imwrite(osp.join(self.gplane_dir, '%06d.png' % self.counter), self.gplane)
+    
+    def save_trajectory(self):
+        for i, trajectory in enumerate(self.trajectories):
+            dir = osp.join(self.traj_dir, '%06d' % trajectory.id)
+            mkdirs(dir)
+            for j, tracklet in enumerate(trajectory.data):
+                fname = osp.join(dir, '%06d.%d.jpg' % (j, tracklet.chan))
+                cv2.imwrite(fname, tracklet.im)
+    
+    def overlap_global_identity(self):
+        for trajectory in self.trajectories:
+            text = '{}'.format(trajectory.id)
+            text_size, baseline = cv2.getTextSize(
+                text, cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, 1)
+            for i, tracklet in enumerate(trajectory.data):
+                if trajectory.drew[i]:
+                    continue
+                path = osp.join('tasks',
+                    'mtsct_{}'.format(tracklet.chan),
+                    '%06d.jpg' % tracklet.fcount)
+                im = cv2.imread(path)
+                box = tracklet.box
+                l, t, r, b = box.round().astype(np.int32).tolist()
+                x = min(max(r - text_size[0], 0), im.shape[1] - text_size[0] - 1)
+                y = min(max(t + text_size[1], text_size[1]), im.shape[0] - baseline - 1)
+                im = cv2.putText(im, text, (x, y), cv2.FONT_HERSHEY_COMPLEX_SMALL,
+                    2, (0,255,255), thickness=1)
+                cv2.imwrite(path, im)
+                trajectory.drew[i] = True
     
     def print_trajectory(self):
         for t in self.trajectories:
-            # for ti in t.data:
-            #     print('{} {} {}'.format(t.id, ti['location'], ti['time']))
-            print('{} {}'.format(t.id, len(t.data)))
+            print('gid:{}, len:{}'.format(t.id, len(t.data)))
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -403,7 +584,7 @@ def main():
     # Waiting for Datastore finish.
     ndead = 0
     while ndead != ncamera:
-        ndead = sum([int(not t.is_alive()) for t in threads[0::2]])
+        ndead = sum([int(not t.is_alive()) for t in threads[:-1][0::2]])
         time.sleep(1)
     print('Datastore done.')
     

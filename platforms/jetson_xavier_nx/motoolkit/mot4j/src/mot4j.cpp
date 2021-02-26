@@ -95,7 +95,7 @@ JNIEXPORT jint JNICALL Java_com_sihan_system_jni_utils_mot4j_unload_1mot_1model
 // 执行多目标跟踪
 //*********************************************************************
 JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1model
-  (JNIEnv *env, jobject obj, jbyteArray data, jint width, jint height, jint stride)
+  (JNIEnv *env, jobject obj, jbyteArray data, jint width, jint height, jint stride, jint channel)
 {
     Json::Value result;
     jbyte *jbgr = env->GetByteArrayElements(data, NULL);
@@ -139,6 +139,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1mo
             result[i]["rects"][j]["y"] = std::to_string(t);
             result[i]["rects"][j]["width"] = std::to_string(w);
             result[i]["rects"][j]["height"] = std::to_string(h);
+            result[i]["rects"][j]["channel"] = std::to_string(channel);
             ++j;
             if (j > MAX_TRACK_LEN)
                 break;
@@ -153,7 +154,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1mo
 // 定时获取所有轨迹
 //*********************************************************************
 JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_get_1total_1tracks
-  (JNIEnv *env, jobject obj, jint reset)
+  (JNIEnv *env, jobject obj, jint reset, jint channel)
 {
     Json::Value result;
     std::thread::id tid = std::this_thread::get_id();
@@ -181,6 +182,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_get_1total_1trac
                 result[i]["rects"][j]["y"] = std::to_string(t);
                 result[i]["rects"][j]["width"] = std::to_string(w);
                 result[i]["rects"][j]["height"] = std::to_string(h);
+                result[i]["rects"][j]["channel"] = std::to_string(channel);
                 ++j;
             }
         }

@@ -1,5 +1,9 @@
 # JDE
-Towards Real-Time Multi-Object Tracking
+Towards Real-Time Multi-Object Tracking <br>
+
+The code in the mot directory is easier to use when training! <br>
+Use tools/train.py instead of ./train.py.
+The *.py file in the root directory will be deprecated. <br>
 
 # 1. 训练步骤
 

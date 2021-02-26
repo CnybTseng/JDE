@@ -58,7 +58,7 @@ public class mot4j
      * @return 多目标跟踪结果, 为Json转换来的字符串. 轨迹坐标序列中的第一个点如果全零,
      *         表示该条轨迹是历史轨迹.
      */
-    public native String forward_mot_model(byte data[], int width, int height, int stride);
+    public native String forward_mot_model(byte data[], int width, int height, int stride, int channel);
     
     /**
      * @brief 定时获取所有轨迹.
@@ -69,5 +69,5 @@ public class mot4j
      * @return
      *        如果定时器溢出, 返回所有轨迹; 否则, 返回null.
      */
-    public native String get_total_tracks(int reset);
+    public native String get_total_tracks(int reset, int channel);
 }
