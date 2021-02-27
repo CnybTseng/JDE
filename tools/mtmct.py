@@ -244,7 +244,6 @@ class MTMCT(Thread):
         self.least = 5 # at least `least` tracklets for matching
         self.atmost = 15    # at most `atmost` tracklets for matching
         self.ncamera = 0
-        self.topk = 5
         self.max_dist = 25
         self.traj_dir = osp.join('tasks', 'trajectories')
         mkdirs(self.traj_dir)

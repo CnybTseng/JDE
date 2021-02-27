@@ -110,11 +110,11 @@ static void do_work(int argc, char* argv[], const char* path)
 #if (!PROFILE)
             auto end = std::chrono::high_resolution_clock::now();
             latency = std::chrono::duration<float, std::milli>(end - start).count();
-            fprintf(stdout, "\r%s: %s %fms", ss.str().c_str(), filein, latency);
+            fprintf(stdout, "%s: %s %fms\n", ss.str().c_str(), filein, latency);
 #else
             fprintf(stdout, "\r%s: %s", ss.str().c_str(), filein);
 #endif
-            fflush(stdout);
+            // fflush(stdout);
             
             if (save)
             {
