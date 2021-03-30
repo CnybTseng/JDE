@@ -126,20 +126,20 @@ int load_mot_model(const char *cfg_path)
     
     // Allocate algorithm usage buffers.
     model.indims = model.jde->get_binding_dims(0);
-    model.rszim_hwc = std::shared_ptr<unsigned char>(new unsigned char[model.indims.numel()]);
+    model.rszim_hwc = std::shared_ptr<unsigned char>(new unsigned char[model.indims.numel()], ArrayDeleter<unsigned char>());
     memset(model.rszim_hwc.get(), 128, model.indims.numel());
-    model.rszim_chw = std::shared_ptr<unsigned char>(new unsigned char[model.indims.numel()]);
-    model.in = std::shared_ptr<float>(new float[model.indims.numel()]);
+    model.rszim_chw = std::shared_ptr<unsigned char>(new unsigned char[model.indims.numel()], ArrayDeleter<unsigned char>());
+    model.in = std::shared_ptr<float>(new float[model.indims.numel()], ArrayDeleter<float>());
     
     for (int i = 0; i < model.out.size(); ++i) {
         DimsX dims = model.jde->get_binding_dims(i + 1);
-        model.out[i] = std::shared_ptr<float>(new float[dims.numel()]);
+        model.out[i] = std::shared_ptr<float>(new float[dims.numel()], ArrayDeleter<float>());
     }
 #if (USE_DECODERV2 && (!INTEGRATES_DECODER))    
     size_t numel = numel_after_align(nvinfer1::jdec::maxNumOutputBox *
         nvinfer1::jdec::decOutputDim + 1, sizeof(float), 8);
     cudaMalloc((void**)&model.dets_gpu, numel * sizeof(float));    
-    model.dets_cpu = std::shared_ptr<float>(new float[numel]);
+    model.dets_cpu = std::shared_ptr<float>(new float[numel], ArrayDeleter<float>());
 #endif    
     model.rawdet.reserve(nvinfer1::jdec::maxNumOutputBox);
     model.nmsdet.reserve(nvinfer1::jdec::maxNumOutputBox);

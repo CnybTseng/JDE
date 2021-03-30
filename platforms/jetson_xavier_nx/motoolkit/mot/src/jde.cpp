@@ -74,7 +74,7 @@ bool JDE::init(void)
         fin.seekg(0, std::ios::end);
         size_t size = fin.tellg();
         fin.seekg(0, std::ios::beg);
-        std::shared_ptr<char> blob = std::shared_ptr<char>(new char[size]);
+        std::shared_ptr<char> blob(new char[size], ArrayDeleter<char>());
         fin.read(blob.get(), size);
         fin.close();
         engine = runtime->deserializeCudaEngine(blob.get(), size);

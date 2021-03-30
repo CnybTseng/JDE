@@ -147,7 +147,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
     }
     
     std::ostringstream oss;
-    oss << channel1 << "-" << channel2;
+    oss << (int)channel1 << "-" << (int)channel2;
     const std::string &key = oss.str();
     
     // Requested channels have not been registered yet.
@@ -233,7 +233,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
         // Give priority to the second channel track.
         for (int i = 0; i < fps2.size(); ++i) {
             tracks[merged_id]["rects"][i] = jtracks2[iter->second]["rects"][i];
-            tracks[merged_id]["rects"][i]["channel"] = std::to_string(channel2);
+            tracks[merged_id]["rects"][i]["channel"] = std::to_string((int)channel2);
         }
         
         // Only if fps1 is longer than fps2.
@@ -245,7 +245,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
             // tracks[merged_id]["rects"][i]["width"] = 0;
             // tracks[merged_id]["rects"][i]["height"] = 0;
             tracks[merged_id]["rects"][i] = jtracks1[iter->first]["rects"][i];
-            tracks[merged_id]["rects"][i]["channel"] = std::to_string(channel1);
+            tracks[merged_id]["rects"][i]["channel"] = std::to_string((int)channel1);
         }
         
         merged_id++;
@@ -268,7 +268,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
         // }
         for (int j = 0; j < jtracks1[mismatch_row[i]]["rects"].size(); ++j) {
             tracks[merged_id]["rects"][j] = jtracks1[mismatch_row[i]]["rects"][j];
-            tracks[merged_id]["rects"][j]["channel"] = std::to_string(channel1);
+            tracks[merged_id]["rects"][j]["channel"] = std::to_string((int)channel1);
         }
         ++merged_id;
     }
@@ -282,7 +282,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_TrackMerge_merge_1trac
         tracks[merged_id]["rects"] = rects;
         for (int j = 0; j < jtracks2[mismatch_col[i]]["rects"].size(); ++j) {
             tracks[merged_id]["rects"][j] = jtracks2[mismatch_col[i]]["rects"][j];
-            tracks[merged_id]["rects"][j]["channel"] = std::to_string(channel2);
+            tracks[merged_id]["rects"][j]["channel"] = std::to_string((int)channel2);
         }
         ++merged_id;
     }

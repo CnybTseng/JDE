@@ -73,33 +73,42 @@ static void do_work(int argc, char* argv[], const char* path)
     if (ret)
         return;
     
+    // 读取目录中的文件
+    dirent **dir = NULL;
+    int num = scandir(path, &dir, 0, alphasort);
+    std::vector<std::string> fpaths;
+    for (int i = 0; i < num; ++i)
+    {
+        // 只处理jpg后缀文件
+        if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
+        {
+            free(dir[i]);
+            continue;
+        }
+
+        fpaths.emplace_back(std::string(path) + std::string(dir[i]->d_name));
+        free(dir[i]);
+        fprintf(stdout, "%s\n", fpaths.back().c_str());
+    }
+    free(dir);
+    
+    // OpenCV绘图相关参数
+    mot::MOT_Result result;
+    int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
+    double fontscale = 1;
+    int thickness = 1;
+        
     for (int test = 0; test < iters; ++test)
     {
-        // OpenCV绘图相关参数
-        mot::MOT_Result result;
-        int fontface = cv::FONT_HERSHEY_COMPLEX_SMALL;
-        double fontscale = 1;
-        int thickness = 1;
-        
-        // 读取目录中的文件
-        dirent **dir = NULL;
-        int num = scandir(path, &dir, 0, alphasort);
         float latency = 0;
-        for (int i = 0; i < num; ++i)
+        for (std::vector<std::string>::size_type i = 0; i < fpaths.size(); ++i)
         {
-            // 只处理jpg后缀文件
-            if (DT_REG != dir[i]->d_type || !strstr(dir[i]->d_name, "jpg"))
-                continue;
-
-            char filein[128] = {0};
-            strcat(filein, path);
-            strcat(filein, dir[i]->d_name);
-            
             // 读取图像文件和解码成BGR888
+            std::string filein = fpaths[i];
             cv::Mat bgr = cv::imread(filein);
             if (bgr.empty())
             {
-                fprintf(stdout, "cv::imread(%s) fail!\n", filein);
+                fprintf(stdout, "cv::imread(%s) fail!\n", filein.c_str());
                 continue;
             }
 #if (!PROFILE)
@@ -110,11 +119,11 @@ static void do_work(int argc, char* argv[], const char* path)
 #if (!PROFILE)
             auto end = std::chrono::high_resolution_clock::now();
             latency = std::chrono::duration<float, std::milli>(end - start).count();
-            fprintf(stdout, "%s: %s %fms\n", ss.str().c_str(), filein, latency);
+            fprintf(stdout, "%s: %s %fms\n", ss.str().c_str(), filein.c_str(), latency);
 #else
-            fprintf(stdout, "\r%s: %s", ss.str().c_str(), filein);
+            fprintf(stdout, "\r%s: %s", ss.str().c_str(), filein.c_str());
 #endif
-            // fflush(stdout);
+            fflush(stdout);
             
             if (save)
             {
@@ -166,15 +175,12 @@ static void do_work(int argc, char* argv[], const char* path)
                 }
                 
                 // 保存结果图像
-                char fileout[128] = {0};
-                strcat(fileout, resdir.c_str());
-                strcat(fileout, dir[i]->d_name);
+                std::string fileout = resdir + fpaths[i].substr(fpaths[i].find_last_of("/") + 1);
                 cv::imwrite(fileout, bgr);
             }
-            free(dir[i]);
         }
-        
-        free(dir);
+        // 循环测试
+        std::reverse(fpaths.begin(), fpaths.end());
     }
     // 4. 卸载MOT模型
     mot::unload_mot_model();
@@ -185,18 +191,21 @@ static void do_work_for_video(int argc, char* argv[], const char* path)
 {
     std::thread::id tid = std::this_thread::get_id();
 
-    // 判断用户提供的图像文件目录是否合法
-    struct stat statbuf;
-    if (0 != stat(path, &statbuf))
+    if (strstr(path, "rtsp") != path)   // 不是rtsp流
     {
-        fprintf(stderr, "stat error: %d\n", errno);
-        return;
-    }
-    
-    if (!S_ISREG (statbuf.st_mode))
-    {
-        fprintf(stderr, "%s is not a regular file!\n", path);
-        return;
+        // 判断用户提供的图像文件目录是否合法
+        struct stat statbuf;
+        if (0 != stat(path, &statbuf))
+        {
+            fprintf(stderr, "stat error: %d\n", errno);
+            return;
+        }
+        
+        if (!S_ISREG (statbuf.st_mode))
+        {
+            fprintf(stderr, "%s is not a regular file!\n", path);
+            return;
+        }
     }
     
     int save = 0;
@@ -389,6 +398,11 @@ int main(int argc, char *argv[])
     struct stat statbuf;
     std::vector<std::thread> work_groups(num_thread);
     for (size_t i = 0; i < work_groups.size(); ++i) {
+        if (strstr(paths[i].c_str(), "rtsp") == paths[i].c_str())   // rtsp流
+        {
+            work_groups[i] = std::thread(do_work_for_video, argc, argv, paths[i].c_str());
+            continue;
+        }
         if (0 != stat(paths[i].c_str(), &statbuf))
         {
             fprintf(stderr, "stat error: %d\n", errno);

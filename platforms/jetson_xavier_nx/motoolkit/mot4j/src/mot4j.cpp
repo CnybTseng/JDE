@@ -139,7 +139,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_forward_1mot_1mo
             result[i]["rects"][j]["y"] = std::to_string(t);
             result[i]["rects"][j]["width"] = std::to_string(w);
             result[i]["rects"][j]["height"] = std::to_string(h);
-            result[i]["rects"][j]["channel"] = std::to_string(channel);
+            result[i]["rects"][j]["channel"] = std::to_string((int)channel);
             ++j;
             if (j > MAX_TRACK_LEN)
                 break;
@@ -182,7 +182,7 @@ JNIEXPORT jstring JNICALL Java_com_sihan_system_jni_utils_mot4j_get_1total_1trac
                 result[i]["rects"][j]["y"] = std::to_string(t);
                 result[i]["rects"][j]["width"] = std::to_string(w);
                 result[i]["rects"][j]["height"] = std::to_string(h);
-                result[i]["rects"][j]["channel"] = std::to_string(channel);
+                result[i]["rects"][j]["channel"] = std::to_string((int)channel);
                 ++j;
             }
         }

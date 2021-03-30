@@ -27,3 +27,9 @@
 
 2021.01.29 mot-0.3.1.tar.bz2
 1> 删除mot4j模块is_the_track_queue_full()接口, 新增get_total_tracks()接口, 用于定时获取所有轨迹
+
+2021.03.12 mot-0.3.5.tar.bz2
+1> 修复get_total_tracks返回轨迹通道号异常的问题
+
+2021.03.22 mot-0.3.6.tar.bz2
+1> 解决将工程车误识别为人的问题, 更新了模型参数文件

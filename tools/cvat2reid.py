@@ -8,7 +8,8 @@ sys.path.append(os.getcwd())
 from mot.utils import mkdirs
 
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='Convert CVAT mot annotations to ReID annotations')
     parser.add_argument('--video', '-v', type=str, help=
         'path to the video file')
     parser.add_argument('--label', '-l', type=str, help=
@@ -17,6 +18,14 @@ def parse_args():
         help='minimum width')
     parser.add_argument('--minh', type=int, default=0,
         help='minimum height')
+    parser.add_argument('--start-id', type=int, default=0,
+        help='the start id for this scene')
+    parser.add_argument('--camid', type=int, default=0,
+        help='camera index')
+    parser.add_argument('--seq', type=int, default=0,
+        help='video sequence number for the camera')
+    parser.add_argument('--size', type=int, nargs='+', default=[64, 128],
+        help='normalized clip size')
     args = parser.parse_args()
     return args
 
@@ -26,7 +35,7 @@ if __name__ == '__main__':
     width = int(vc.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(vc.get(cv2.CAP_PROP_FRAME_HEIGHT))
     frames = int(vc.get(cv2.CAP_PROP_FRAME_COUNT))
-    print('width {}, height {}, frames {}'.format(width, height, frames))
+    print('width {}, height {}, possible frames {}'.format(width, height, frames))
     
     root, _ = os.path.splitext(args.video)
     cache_path = os.path.join(root, 'frames')
@@ -42,15 +51,8 @@ if __name__ == '__main__':
             print('\rextract frame {}/{}'.format(i, frames), end='', flush=True)
     
     print('')
-    mot_path = os.path.join(root, 'mot')
-    mkdirs(mot_path)
-    im_path = os.path.join(mot_path, 'images')
-    if not os.path.exists(im_path):
-        mkdirs(im_path)
-    
-    lb_path = os.path.join(mot_path, 'labels_with_ids')
-    if not os.path.exists(lb_path):
-        mkdirs(lb_path)
+    reid_path = os.path.join(root, 'reid')
+    mkdirs(reid_path)
 
     # cvat has a terrible bug.
     # We have to remove repeated items (in unlabeled frames) manully!
@@ -74,32 +76,31 @@ if __name__ == '__main__':
 
     for frame, values in no_copy_gather_labels.items():
         frame = int(frame)
-        outfile = os.path.join(lb_path, '%06d.txt' % frame)
-        with open(outfile, 'w') as file:
-            for value in values:    
-                strs = value.split(',')
-                id, *ltwh, conf, cate, visi = strs                
-                l, t, w, h = [float(i) for i in ltwh]
-                if w < args.minw or h < args.minh:
-                    continue
-                
-                id = int(id)
-                x, y = (l + w / 2.0) / width, (t + h / 2.0) / height
-                w, h = w / width, h / height
-                
-                file.write('{} {} {} {} {} {}\n'.format(
-                    0, id, x, y, w, h))
-        
         infile = os.path.join(cache_path, '{}.jpg'.format(frame))
-        outfile = os.path.join(im_path, '%06d.jpg' % frame)
-        # Fuck the OpenCV for unreliable frame location!
-        # vc.set(cv2.CAP_PROP_POS_FRAMES, frame)
-        # retval, image = vc.read()
-        # if retval:
-        #     cv2.imwrite(outfile, image)
-        # else:
-        #     print('read frame {} fail\n'.format(frame))
-        cmd = 'cp {} {}'.format(infile, outfile)
-        print('\r{}'.format(cmd), end='', flush=True)
-        os.system(cmd)
-    print('')
+        im = cv2.imread(infile)
+        if im is None:
+            print('imread {} failed'.format(infile))
+            continue
+        
+        # All labels for current frame.
+        for value in values:    
+            strs = value.split(',')
+            id, *ltwh, conf, cate, visi = strs                
+            l, t, w, h = [int(float(i) + 0.5) for i in ltwh]
+            if w < args.minw or h < args.minh:
+                continue            
+            
+            l = np.clip(l, 0, im.shape[1] - 1)
+            t = np.clip(t, 0, im.shape[0] - 1)
+            w = np.clip(w, 1, im.shape[1] - 1 - l)
+            h = np.clip(h, 1, im.shape[0] - 1 - t)
+            clip = im[t : t + h, l : l + w, :]
+            clip = cv2.resize(clip, tuple(args.size), 0, 0, cv2.INTER_AREA)
+            id = int(id)            
+            gid = args.start_id + id
+            class_path = os.path.join(reid_path, '%04d' % gid)
+            mkdirs(class_path)
+            name = '%04d_c%ds%d_%06d_%02d' % (gid, args.camid, args.seq, frame, 0)
+            outfile = os.path.join(class_path, name + '.jpg')
+            cv2.imwrite(outfile, clip)
+    print('done')

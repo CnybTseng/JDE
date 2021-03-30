@@ -102,6 +102,7 @@ class ImageToWorldTsai:
         return tuple(X[:2].tolist())
 
 class Datastore(Thread):
+    """Local images provider"""
     def __init__(self, tid, data_path, images, insize=(320, 576, 3)):
         super(Datastore, self).__init__(name=tid)
         self.tid = tid
@@ -142,7 +143,7 @@ class MTSCT(Thread):
         self.exit = exit
         self.model = model.cuda()   # Tracker model
         self.model.eval()
-        self.locator = locator
+        self.locator = locator      # ground plane location
         self.insize = insize
         self.score_thresh = 0.5
         self.iou_thresh = 0.4
@@ -176,8 +177,8 @@ class MTSCT(Thread):
                 # Package local tracklets.
                 for i, track in enumerate(tracks):
                     im = self.clip(track.ltrb, raw_img)
-                    xf = (track.ltrb[0] + track.ltrb[2]) / 2
-                    yf = track.ltrb[3]
+                    xf = (track.ltrb[0] + track.ltrb[2]) / 2    # x of footprint
+                    yf = track.ltrb[3]                          # y of footprint
                     location = self.locator((xf, yf))
                     tracklet = Tracklet(self.tid, track.id, track.ltrb, im, location, counter)
                     tracklets.append(tracklet)

@@ -55,6 +55,15 @@ struct InferDeleter
 };
 
 template <typename T>
+struct ArrayDeleter
+{
+    void operator()(T const *p)
+    {
+        delete [] p;
+    }
+};
+
+template <typename T>
 using UniquePtr = std::unique_ptr<T, InferDeleter>;
 
 struct SimpleProfiler : public nvinfer1::IProfiler

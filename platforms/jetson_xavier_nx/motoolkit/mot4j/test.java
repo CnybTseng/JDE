@@ -36,7 +36,7 @@ public class test
         if (argv.length < 2)
         {
             System.err.printf("Usage:\n\tjava test /path/to/.yaml");
-            System.err.printf(" /path/to/images [max_frames, default is 5]\n");
+            System.err.printf(" /path/to/images [[max_frames=5],[reset=1]]\n");
             return;
         }
         test t = new test(argv);
@@ -69,6 +69,7 @@ public class test
         File fs[] = file.listFiles();
         Arrays.sort(fs);
         int timestamp = 0;
+        int channel = 20;
 
         for (File f : fs)
         {
@@ -101,7 +102,7 @@ public class test
             byte data[] = ((DataBufferByte)im.getRaster().getDataBuffer()).getData();
             
             // 2. 执行模型推理
-            String result = handle.forward_mot_model(data, im.getWidth(), im.getHeight(), stride);
+            String result = handle.forward_mot_model(data, im.getWidth(), im.getHeight(), stride, channel);
             
             // 拿着跟踪结果去绘图, 或抠图, 或啥的......
             // System.out.println(result);                
@@ -138,7 +139,7 @@ public class test
                         System.err.println("store tracks fail\n");
                     }
                     
-                    String totals = handle.get_total_tracks(reset);
+                    String totals = handle.get_total_tracks(reset, channel);
                     try
                     {
                         JSONArray array2 = new JSONArray(totals);
