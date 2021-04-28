@@ -1,17 +1,7 @@
 add_library(reid SHARED ${LIBSRCS})
 target_link_libraries(
     reid
-    libopencv_video.a
-    libopencv_imgproc.a
-    libopencv_core.a
-    libade.a
-    libIlmImf.a
-    libittnotify.a
-    liblibopenjp2.a
-    liblibprotobuf.a
-    liblibwebp.a
-    libquirc.a
-    libtegra_hal.a
+    ${OpenCV_LIBS}
     -lnvinfer
     -lnvonnxparser
     -lcudart
@@ -31,19 +21,7 @@ install(TARGETS reid
 add_library(reid-static STATIC ${LIBSRCS})
 target_link_libraries(
     reid-static
-    libopencv_dnn.a
-    libopencv_video.a
-    libopencv_imgcodecs.a
-    libopencv_imgproc.a
-    libopencv_core.a
-    libade.a
-    libIlmImf.a
-    libittnotify.a
-    liblibopenjp2.a
-    liblibprotobuf.a
-    liblibwebp.a
-    libquirc.a
-    libtegra_hal.a
+    ${OpenCV_LIBS}
     -lnvinfer
     -lnvonnxparser
     -lcudart

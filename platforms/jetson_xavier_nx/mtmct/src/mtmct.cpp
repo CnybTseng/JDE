@@ -7,6 +7,7 @@
 #include <iostream>
 #include <algorithm>
 #include <condition_variable>
+#include <opencv2/opencv.hpp>
 #include "mtmct.h"
 #include "tsque.hpp"
 
@@ -16,13 +17,20 @@ namespace algorithm {
 
 /**
  * @brief Augmented tracklet structure.
+ * @warning clip and embed are arrays, be carefull when create shared pointer!
  */
 struct augtracklet : public tracklet
 {
+    bool read;  // has been read by tgget or not
     unsigned int id;    // target identity
     std::shared_ptr<unsigned char> clip;    // target clip
     std::shared_ptr<float> embed;   // target embedding
 };
+
+/**
+ * @brief typedef augtrajectory.
+ */
+typedef __trajectory<augtracklet> augtrajectory;
 
 /**
  * @brief struct image.
@@ -39,10 +47,12 @@ struct image
             stride = BPP_BGR888 * width;
         }
         size_t size = height * stride;
-        data = std::shared_ptr<unsigned char>(new unsigned char[size], [](unsigned char *p){delete [] p;});
+        unsigned char *ptr = ::new (std::nothrow) unsigned char[size];
+        assert(nullptr != ptr);
+        data = std::shared_ptr<unsigned char>(ptr, [](unsigned char *p){delete [] p;});
         memcpy(data.get(), _data, size);
     }
-    std::shared_ptr<unsigned char> data;    // pixel data
+    std::shared_ptr<unsigned char> data;    // pixel data array
     short width;    // horizontal resolution
     short height;   // vertical resolution
     size_t stride;  // byte stride of one scan line
@@ -81,9 +91,8 @@ public:
  */
 enum threadstate
 {
-    NEW = 0,    // the thread just has been created
-    RUNNING,    // running all algorithms
     STOP,       // stop all algorithms
+    RUNNING,    // running all algorithms
     EXIT        // exit the thread
 };
 
@@ -94,6 +103,23 @@ static std::condition_variable cv;  // cv for ts
 static std::mutex mtx;  // the mutex for cv
 
 /**
+ * @brief Camera comparing function.
+ */
+typedef bool (*camcomp)(camera, camera);
+
+static void make_random_tracklet(std::vector<augtracklet> &tracks);
+
+/**
+ * @brief Copy trajectories.
+ * @param src The trajectory source.
+ * @param dst The trajectory destination.
+ * @param compare Camera ID comparing function.
+ * @param cam Camera ID.
+ * @return Return true if success, else return false.
+ */
+static bool trajcopy(std::vector<augtrajectory> &src, std::vector<trajectory> &dst, camcomp compare, camera cam=0);
+
+/**
  * @brief class mtmct::implementor.
  * @detail This is the actual implementation for the mtmct algorithm.
  */
@@ -101,32 +127,34 @@ class mtmct::implementor
 {
 public:
     bool init(const std::vector<unsigned char> &cams, const char *config);
-    bool camadd(unsigned char cam);
-    bool camdel(unsigned char cam);
+    bool camadd(camera cam);
+    bool camdel(camera cam);
     bool run();
-    bool impush(unsigned char cam, const unsigned char *data, short width, short height, size_t stride=0);
-    bool tgtpop(std::vector<trajectory> &local, unsigned char cam);
-    bool tgtpop(std::vector<trajectory> &global);
+    bool impush(camera cam, const unsigned char *data, short width, short height, size_t stride=0);
+    bool tgget(std::vector<trajectory> &local, camera cam);
+    bool tgget(std::vector<trajectory> &global);
     bool stop();
     void deinit();
 private:
-    void initonce(const std::vector<unsigned char> &cams, const char *config, bool &flag);
+    void initonce(const std::vector<camera> &cams, const char *config, bool &flag);
     void deinitonce();
-    void motexe(unsigned char cam);
-    void mtmctexe();
-    std::vector<unsigned char> cameras;
-    std::map<unsigned char, tsque<std::shared_ptr<image>>> images;  // input images, shared between user and mot
-    std::map<unsigned char, tsque<std::shared_ptr<std::vector<augtracklet>>>> tracklets; // local tracklet, shared between mot and mtmct
-    std::map<unsigned char, std::vector<trajectory>> lltraj;    // local trajectories, shared between mtmct and user
-    std::map<unsigned char, std::thread> motts;  // single camera multiple object tracking threads
+    void mottf(camera cam);
+    void mtmcttf();
+    std::vector<camera> cameras;
+    std::map<camera, tsque<std::shared_ptr<image>>> images;  // input images, shared between user and mot
+    std::map<camera, tsque<std::shared_ptr<std::vector<augtracklet>>>> tracklets; // local tracklet, shared between mot and mtmct
+    std::map<camera, std::vector<augtrajectory>> lltraj;    // local trajectories, shared between mtmct and user
+    std::map<camera, std::mutex> llmtx;   // mutex for lltraj
+    std::map<camera, std::thread> motts;  // single camera multiple object tracking threads
     std::thread mtmctt; // multiple targets multiple camera tracking thread
-    std::vector<trajectory> gltraj;    // global trajectories, shared between mtmct and user
+    std::vector<augtrajectory> gltraj;    // global trajectories, shared between mtmct and user
+    std::mutex glmtx;   // mutex for glmtx
 };
 
 //*******************************************************************
 // Actual implementation for mtmct::init()
 //*******************************************************************
-bool mtmct::implementor::init(const std::vector<unsigned char> &cams, const char *config)
+bool mtmct::implementor::init(const std::vector<camera> &cams, const char *config)
 {
     bool flag = false;
     //! What a weird method to solve 'invalid use of non-static member function' error!
@@ -138,7 +166,7 @@ bool mtmct::implementor::init(const std::vector<unsigned char> &cams, const char
 //*******************************************************************
 // Thread function for mtmct::implementor::init()
 //*******************************************************************
-void mtmct::implementor::initonce(const std::vector<unsigned char> &cams, const char *config, bool &flag)
+void mtmct::implementor::initonce(const std::vector<camera> &cams, const char *config, bool &flag)
 {
     printf("initonce\n");
     if (cams.empty()) {
@@ -147,15 +175,12 @@ void mtmct::implementor::initonce(const std::vector<unsigned char> &cams, const 
     cameras.assign(cams.begin(), cams.end());
     thread_wrapper tw;
     for (size_t i = 0; i < cams.size(); ++i) {
-        images[cams[i]] = tsque<std::shared_ptr<image>>();
-        tracklets[cams[i]] = tsque<std::shared_ptr<std::vector<augtracklet>>>();
-        lltraj[cams[i]] = std::vector<trajectory>();
-        if (!tw.create(motts[cams[i]], &mtmct::implementor::motexe, this, cams[i])) {
+        if (!tw.create(motts[cams[i]], &mtmct::implementor::mottf, this, cams[i])) {
             return;
         }
         motts[cams[i]].detach();
     }
-    if (!tw.create(mtmctt, &mtmct::implementor::mtmctexe, this)) {
+    if (!tw.create(mtmctt, &mtmct::implementor::mtmcttf, this)) {
         return;
     }
     mtmctt.detach();
@@ -165,17 +190,14 @@ void mtmct::implementor::initonce(const std::vector<unsigned char> &cams, const 
 //*******************************************************************
 // Actual implementation for mtmct::camadd()
 //*******************************************************************
-bool mtmct::implementor::camadd(unsigned char cam)
+bool mtmct::implementor::camadd(camera cam)
 {
     if (std::find(cameras.begin(), cameras.end(), cam) != cameras.end()) {
         return false;
     }
     cameras.emplace_back(cam);
-    images[cam] = tsque<std::shared_ptr<image>>();
-    tracklets[cam] = tsque<std::shared_ptr<std::vector<augtracklet>>>();
-    lltraj[cam] = std::vector<trajectory>();
     thread_wrapper tw;
-    if (!tw.create(motts[cam], &mtmct::implementor::motexe, this, cam)) {
+    if (!tw.create(motts[cam], &mtmct::implementor::mottf, this, cam)) {
         return false;
     }
     motts[cam].detach();
@@ -185,7 +207,7 @@ bool mtmct::implementor::camadd(unsigned char cam)
 //*******************************************************************
 // Actual implementation for mtmct::camdel()
 //*******************************************************************
-bool mtmct::implementor::camdel(unsigned char cam)
+bool mtmct::implementor::camdel(camera cam)
 {
     auto iter = std::find(cameras.begin(), cameras.end(), cam);
     if (iter == cameras.end()) {
@@ -213,7 +235,7 @@ bool mtmct::implementor::run()
 //*******************************************************************
 // Actual implementation for mtmct::impush()
 //*******************************************************************
-bool mtmct::implementor::impush(unsigned char cam, const unsigned char *data, short width, short height, size_t stride)
+bool mtmct::implementor::impush(camera cam, const unsigned char *data, short width, short height, size_t stride)
 {
     if (std::find(cameras.begin(), cameras.end(), cam) == cameras.end()) {
         return false;
@@ -224,19 +246,30 @@ bool mtmct::implementor::impush(unsigned char cam, const unsigned char *data, sh
 }
 
 //*******************************************************************
-// Actual implementation for mtmct::tgtpop()
+// Actual implementation for mtmct::tgget()
 //*******************************************************************
-bool mtmct::implementor::tgtpop(std::vector<trajectory> &local, unsigned char cam)
+bool mtmct::implementor::tgget(std::vector<trajectory> &local, camera cam)
 {
+    if (std::find(cameras.begin(), cameras.end(), cam) == cameras.end()) {
+        std::cerr << "The camera is not in device list\n";
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(llmtx[cam]);
+    std::vector<augtrajectory> &traj = lltraj[cam];
+    if (trajcopy(traj, local, [](camera a, camera b){return a == b;}, cam)) {
+        std::cerr << "camera IDs are not matched\n";
+        return false;
+    }
     return true;
 }
 
 //*******************************************************************
-// Actual implementation for mtmct::tgtpop()
+// Actual implementation for mtmct::tgget()
 //*******************************************************************
-bool mtmct::implementor::tgtpop(std::vector<trajectory> &global)
+bool mtmct::implementor::tgget(std::vector<trajectory> &global)
 {
-    return true;
+    std::lock_guard<std::mutex> lock(glmtx);
+    return trajcopy(gltraj, global, [](camera a, camera b){return true;});
 }
 
 //*******************************************************************
@@ -269,15 +302,10 @@ void mtmct::implementor::deinitonce()
     cv.notify_all();
 }
 
-static void make_random_tracklet(std::vector<augtracklet> &tracks)
-{
-    
-}
-
 //*******************************************************************
-// MOT thread execution function.
+// MOT thread function.
 //*******************************************************************
-void mtmct::implementor::motexe(unsigned char cam)
+void mtmct::implementor::mottf(camera cam)
 {
     printf("mot%u: create\n", cam);
     unsigned long counter = 0;
@@ -292,7 +320,7 @@ void mtmct::implementor::motexe(unsigned char cam)
             if (ts == EXIT) {
                 break;
             }
-            printf("mot%u: running\n", cam);
+            printf("mot%u: running again\n", cam);
         }
         lock.unlock();
         // Get image from queue.
@@ -301,8 +329,8 @@ void mtmct::implementor::motexe(unsigned char cam)
             std::this_thread::sleep_for(std::chrono::microseconds(1000));   // 1ms
             continue;
         }
-        // printf("mot%u: get %lu images, %dx%d\n", cam, counter++, im.get()->width, im.get()->height);
-        // TODO: Generate tracklets.
+        printf("mot%u: get %lu images, %dx%d\n", cam, counter++, im.get()->width, im.get()->height);
+        // TODO: Generate local tracklets.
         std::vector<augtracklet> tracks;
         make_random_tracklet(tracks);
         // Push tracklets to queue.
@@ -313,9 +341,9 @@ void mtmct::implementor::motexe(unsigned char cam)
 }
 
 //*******************************************************************
-// MTMCT thread execution function.
+// MTMCT thread function.
 //*******************************************************************
-void mtmct::implementor::mtmctexe()
+void mtmct::implementor::mtmcttf()
 {
     printf("mtmct: create\n");
     while (1) {
@@ -329,10 +357,10 @@ void mtmct::implementor::mtmctexe()
             if (ts == EXIT) {
                 break;
             }
-            printf("mtmct: running\n");
+            printf("mtmct: running again\n");
         }
         lock.unlock();
-        // TODO: Get tracklets from queue.
+        // TODO: Get tracklets from queue and extract better ReID feature in higher resolution.
         // TODO: Generate local trajectories.
         // TODO: Generate global trajectories.
         // TODO: push trajectories to queue.
@@ -364,7 +392,7 @@ mtmct *mtmct::inst()
 //*******************************************************************
 // mtmct initialization.
 //*******************************************************************
-bool mtmct::init(const std::vector<unsigned char> &cams, const char *config)
+bool mtmct::init(const std::vector<camera> &cams, const char *config)
 {
     return impl->init(cams, config);
 }
@@ -372,7 +400,7 @@ bool mtmct::init(const std::vector<unsigned char> &cams, const char *config)
 //*******************************************************************
 // Add a camera to device list.
 //*******************************************************************
-bool mtmct::camadd(unsigned char cam)
+bool mtmct::camadd(camera cam)
 {
     return impl->camadd(cam);
 }
@@ -380,7 +408,7 @@ bool mtmct::camadd(unsigned char cam)
 //*******************************************************************
 // Delete a camera from device list.
 //*******************************************************************
-bool mtmct::camdel(unsigned char cam)
+bool mtmct::camdel(camera cam)
 {
     return impl->camdel(cam);
 }
@@ -396,25 +424,25 @@ bool mtmct::run()
 //*******************************************************************
 // Push image to the image queue.
 //*******************************************************************
-bool mtmct::impush(unsigned char cam, const unsigned char *data, short width, short height, size_t stride)
+bool mtmct::impush(camera cam, const unsigned char *data, short width, short height, size_t stride)
 {
     return impl->impush(cam, data, width, height, stride);
 }
 
 //*******************************************************************
-// Pop local targets from trajectory queue.
+// Get local targets from trajectory queue.
 //*******************************************************************
-bool mtmct::tgtpop(std::vector<trajectory> &local, unsigned char cam)
+bool mtmct::tgget(std::vector<trajectory> &local, camera cam)
 {
-    return impl->tgtpop(local, cam);
+    return impl->tgget(local, cam);
 }
 
 //*******************************************************************
-// Pop global targets from trajectory queue.
+// Get global targets from trajectory queue.
 //*******************************************************************
-bool mtmct::tgtpop(std::vector<trajectory> &global)
+bool mtmct::tgget(std::vector<trajectory> &global)
 {
-    return impl->tgtpop(global);
+    return impl->tgget(global);
 }
 
 //*******************************************************************
@@ -446,6 +474,62 @@ mtmct::mtmct() : impl(new implementor)
 //*******************************************************************
 mtmct::~mtmct()
 {
+}
+
+void make_random_tracklet(std::vector<augtracklet> &tracks)
+{
+    
+}
+
+//*******************************************************************
+// Copy trajectories.
+//*******************************************************************
+bool trajcopy(std::vector<augtrajectory> &src, std::vector<trajectory> &dst, camcomp compare, camera cam)
+{
+    std::vector<bool> news(src.size());
+    for (std::vector<trajectory>::size_type i = 0; i < src.size(); ++i) {
+        news[i] = true;
+    }
+    // For exist trajectory, append new tracklet only.
+    for (auto &to : dst) {
+        if (!compare(to.cam, cam)) {
+            return false;
+        }
+        for (std::vector<trajectory>::size_type i = 0; i < src.size(); ++i) {
+            auto &from = src[i];
+            if (to.id == from.id) {
+                std::list<augtracklet> latests; // latests have not been read yet
+                std::list<augtracklet>::reverse_iterator riter;
+                for (riter = from.data.rbegin(); riter != from.data.rbegin(); ++riter) {
+                    if (riter->read) {
+                        break;
+                    }
+                    latests.emplace_front(*riter);
+                    riter->read = true;
+                }
+                to.data.insert(to.data.end(), latests.begin(), latests.end());
+                news[i] = false;
+                break;
+            }
+        }
+    }
+    // For new trajectory, copy all tracklets.
+    for (std::vector<augtrajectory>::size_type i = 0; i < src.size(); ++i) {
+        if (!news[i]) {
+            continue;
+        }
+        auto &from = src[i];
+        std::list<tracklet> data;
+        for (const auto &d : from.data) {
+            data.emplace_back(d);   // cast augtracklet to tracklet
+        }
+        trajectory to = {from.cam, from.id, from.cate, data};
+        dst.emplace_back(to);
+        for (auto &d : from.data) {
+            d.read = true;
+        }
+    }
+    return true;
 }
 
 }   // namespace algorithm

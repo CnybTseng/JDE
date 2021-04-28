@@ -5,6 +5,7 @@ import sys
 import torch
 import argparse
 import collections
+import numpy as np
 
 sys.path.append('.')
 import jde
@@ -41,7 +42,8 @@ if __name__ == '__main__':
     args = parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = shufflenetv2.ShuffleNetV2().to(device)
+    model = shufflenetv2.ShuffleNetV2(np.random.randint(0, 100, (12, 2)),
+        model_size='1.0x').to(device)
     
     model_dict = model.state_dict()
     trained_model_dict = torch.load(args.model, map_location='cpu')

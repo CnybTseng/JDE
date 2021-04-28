@@ -20,7 +20,9 @@
 import java.io.File;
 import java.io.FileWriter;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Vector;
+import java.util.Collections;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
@@ -28,6 +30,7 @@ import java.awt.image.DataBufferByte;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import com.sihan.system.jni.utils.mot4j;
+import com.sihan.system.jni.utils.CrossLineDetector;
 
 public class test
 {
@@ -35,25 +38,24 @@ public class test
     {
         if (argv.length < 2)
         {
-            System.err.printf("Usage:\n\tjava test /path/to/.yaml");
-            System.err.printf(" /path/to/images [[max_frames=5],[reset=1]]\n");
+            System.err.printf("Usage:\n\tjava test CONFIG" +
+                " IMAGE_DIR[ RESET=1[ ITERS=1]]\n");
             return;
         }
         test t = new test(argv);
     }
     public test(String argv[])
-    {
-        // 当有一大堆测试图片的时候, 您也许只想测试前面几张
-        int max_frames = 5;
+    {        
+        int reset = 1;  // 是否定期重置轨迹(轨迹分段)
         if (argv.length >= 3)
         {
-            max_frames = Integer.parseInt(argv[2]);
+            reset = Integer.parseInt(argv[2]);
         }
         
-        int reset = 1;
+        int iters = 1;  // 循环测试次数, 以较短时间的图像序列模拟长时间跟踪
         if (argv.length >= 4)
         {
-            reset = Integer.parseInt(argv[3]);
+            iters = Integer.parseInt(argv[3]);
         }
         
         // 1. 加载模型
@@ -64,106 +66,126 @@ public class test
             return;
         }
         
+        int channel = 20;
+        CrossLineDetector cld = new CrossLineDetector();
+        if (!cld.set_line(channel, 61, 867, 319, 842, 139, 1079))
+        {
+            System.err.println("set_line fail\n");
+        }
+        
         // 读取文件夹下的图片序列, 图片名必须按照名字排序, 保证时间先后顺序不乱
         File file = new File(argv[1]);
         File fs[] = file.listFiles();
         Arrays.sort(fs);
         int timestamp = 0;
-        int channel = 20;
-
-        for (File f : fs)
+        List<File> files = Arrays.asList(fs);
+        for (int iter = 0; iter < iters; iter++)
         {
-            if (f.isDirectory())
+            for (File f : files)
             {
-                continue;
-            }
-            
-            if (max_frames <= 0)
-            {
-                break;
-            }
-
-            // 读取图片并解码
-            System.out.println(f);                
-            BufferedImage im;
-            try
-            {
-                im = ImageIO.read(f);
-            }
-            catch (Exception e)
-            {
-                System.err.printf("ImageIO.read %f fail\n", f);
-                continue;
-            }
-            
-            max_frames--;
-            int stride = im.getWidth() * 3;
-            // 应将data由RGB888转BGR888, 此处仅用于展示算法API调用方法, 就不转了
-            byte data[] = ((DataBufferByte)im.getRaster().getDataBuffer()).getData();
-            
-            // 2. 执行模型推理
-            String result = handle.forward_mot_model(data, im.getWidth(), im.getHeight(), stride, channel);
-            
-            // 拿着跟踪结果去绘图, 或抠图, 或啥的......
-            // System.out.println(result);                
-            try
-            {                
-                JSONArray array = new JSONArray(result);                
-                for (int j = 0; j < array.length(); j++)
+                if (f.isDirectory())
                 {
-                    JSONObject jobj = array.getJSONObject(j);
-                    int identifier = jobj.getInt("identifier");     // 目标轨迹ID
-                    String category = jobj.getString("category");   // 目标类别
-                    JSONArray rects = jobj.getJSONArray("rects");   // 目标边框集合
-                    System.out.printf("%d, %s:\n", identifier, category);
-                    for (int k = 0; k < rects.length(); k++)
-                    {
-                        JSONObject kobj = rects.getJSONObject(k);
-                        int x = kobj.getInt("x");
-                        int y = kobj.getInt("y");
-                        int w = kobj.getInt("width");
-                        int h = kobj.getInt("height");
-                        System.out.printf("\t%d %d %d %d\n", x, y, w, h);
-                    }
+                    continue;
+                }
+
+                // 读取图片并解码
+                System.out.println(f);                
+                BufferedImage im;
+                try
+                {
+                    im = ImageIO.read(f);
+                }
+                catch (Exception e)
+                {
+                    System.err.printf("ImageIO.read %f fail\n", f);
+                    continue;
+                }
+
+                int stride = im.getWidth() * 3;
+                // 应将data由RGB888转BGR888, 此处仅用于展示算法API调用方法, 就不转了
+                byte data[] = ((DataBufferByte)im.getRaster().getDataBuffer()).getData();
+                
+                for (int i = 0; i < data.length; i += 3)
+                {
+                    byte swap = data[i];
+                    data[i] = data[i + 2];
+                    data[i + 2] = swap;
                 }
                 
-                if (array.length() > 0)
+                // 2. 执行模型推理
+                String result = handle.forward_mot_model(data, im.getWidth(), im.getHeight(), stride, channel);
+                if (iters > 1)
                 {
-                    String filename = String.format("./track/%06d.json", timestamp);
-                    try (FileWriter writer = new FileWriter(filename))
+                    continue;
+                }
+                
+                // 循环测试不打印下面的信息
+                // 拿着跟踪结果去绘图, 或抠图, 或啥的......
+                // System.out.println(result);                
+                try
+                {                
+                    JSONArray array = new JSONArray(result);                
+                    for (int j = 0; j < array.length(); j++)
                     {
-                        writer.write(result);
-                    }
-                    catch (Exception e)
-                    {
-                        System.err.println("store tracks fail\n");
+                        JSONObject jobj = array.getJSONObject(j);
+                        int identifier = jobj.getInt("identifier");     // 目标轨迹ID
+                        String category = jobj.getString("category");   // 目标类别
+                        JSONArray rects = jobj.getJSONArray("rects");   // 目标边框集合
+                        // System.out.printf("%d, %s:\n", identifier, category);
+                        for (int k = 0; k < rects.length(); k++)
+                        {
+                            JSONObject kobj = rects.getJSONObject(k);
+                            int x = kobj.getInt("x");
+                            int y = kobj.getInt("y");
+                            int w = kobj.getInt("width");
+                            int h = kobj.getInt("height");
+                            // System.out.printf("\t%d %d %d %d\n", x, y, w, h);
+                        }
                     }
                     
-                    String totals = handle.get_total_tracks(reset, channel);
-                    try
+                    if (array.length() > 0)
                     {
-                        JSONArray array2 = new JSONArray(totals);
-                        String filename2 = String.format("./tracklet/%06d.json", timestamp);
-                        try (FileWriter writer = new FileWriter(filename2))
+                        int recall = 2;
+                        String event = cld.detect_cross_event(result, recall);
+                        System.out.printf(event);
+                        
+                        String filename = String.format("./track/%06d.json", timestamp);
+                        try (FileWriter writer = new FileWriter(filename))
                         {
-                            writer.write(totals);
+                            writer.write(result);
                         }
                         catch (Exception e)
                         {
                             System.err.println("store tracks fail\n");
                         }
-                    }
-                    catch (Exception e)
-                    {
-                        ;
+                        
+                        String totals = handle.get_total_tracks(reset, channel);
+                        try
+                        {
+                            JSONArray array2 = new JSONArray(totals);
+                            String filename2 = String.format("./tracklet/%06d.json", timestamp);
+                            try (FileWriter writer = new FileWriter(filename2))
+                            {
+                                writer.write(totals);
+                            }
+                            catch (Exception e)
+                            {
+                                System.err.println("store tracklet fail\n");
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            ;
+                        }
                     }
                 }
+                catch (Exception e)
+                {
+                    System.err.println("Empty result");
+                }
+                timestamp++;
             }
-            catch (Exception e)
-            {
-                System.err.println("Empty result");
-            }
-            timestamp++;
+            Collections.reverse(files); // 逆序排列图像文件, 轨迹将会平滑过渡
         }
         
         // 3. 卸载模型

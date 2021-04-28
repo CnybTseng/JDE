@@ -4,7 +4,7 @@
 
 1.2. 将动态库(usr/lib/libmot.so, usr/lib/libmot4j.so, usr/lib/libtrack_merge.so)更新到您指定的目录
 
-1.3. 将跟踪模型(mot/build/install/bin/jde.trt)更新到应用程序可执行文件所在目录
+1.3. 删除原有的jde.trt, 将跟踪模型(mot/build/install/bin/jde.wts)更新到应用程序可执行文件所在目录
 
 2.模块更新说明
 
@@ -33,3 +33,13 @@
 
 2021.03.22 mot-0.3.6.tar.bz2
 1> 解决将工程车误识别为人的问题, 更新了模型参数文件
+
+2021.04.13 mot-0.3.7-alpha.tar.bz2
+1> 新增跨线检测模块
+
+2021.04.26 mot-0.3.7-beta.tar.bz2
+1> 将内置的置信度阈值由0.5调整为0.25
+2> jdk版本由15.0切换到1.8.0
+
+2021.04.27 mot-0.3.7.tar.bz2
+1> 更新跟踪模型权重文件jde.wts

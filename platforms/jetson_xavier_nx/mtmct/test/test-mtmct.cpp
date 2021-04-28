@@ -69,6 +69,9 @@ bool parseargs(int argc, char *argv[], option &opt)
                 opt.cams.emplace_back(atoi(strs[j].c_str()));
                 opt.urls[opt.cams.back()] = strs[j + 1];
             }
+        } else {
+            printf("unrecognied argument: %s\n", argv[i]);
+            break;
         }
     }
     return true;
@@ -85,7 +88,7 @@ void init(const std::vector<unsigned char> &cams)
 }
 
 /**
- * @brief Simulate pull stream module.
+ * @brief Simulate push stream module.
  */
 void send(unsigned char cam, option opt)
 {
@@ -111,7 +114,7 @@ void send(unsigned char cam, option opt)
 }
 
 /**
- * @brief Simulate push stream module.
+ * @brief Simulate pull stream module.
  *  Only local trajectories will be processed here.
  */
 void receive(unsigned char cam)
@@ -146,7 +149,10 @@ int main(int argc, char *argv[])
     std::cout << "options:\n" << opt;
 
     // This is a correct calling for algorithm::mtmct::init
-    printf("init: %d\n", algorithm::mtmct::inst()->init(opt.cams));
+    if (!algorithm::mtmct::inst()->init(opt.cams)) {
+        printf("init failed\n");
+        exit(0);
+    }
     std::this_thread::sleep_for(std::chrono::seconds(3));
     
     // Switch between stop and run states.

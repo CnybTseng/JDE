@@ -1,7 +1,8 @@
 #!/bin/sh
 
 echo step 0: update mot library ...
-cp -rf ../mot/build/install/* 3rdparty/mot
+cp -rf ../mot/build/install/include 3rdparty/mot
+cp -rf ../mot/build/install/lib 3rdparty/mot
 
 echo step 1: make mot4j.class and com_sihan_system_jni_utils_mot4j.h ...
 javac -h ./src mot4j.java -d .

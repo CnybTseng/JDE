@@ -7,17 +7,7 @@ add_library(mot SHARED ${libsrcs})
 add_dependencies(mot motplugin)
 target_link_libraries(
     mot
-    libopencv_video.a
-    libopencv_imgproc.a
-    libopencv_core.a
-    libade.a
-    libIlmImf.a
-    libittnotify.a
-    liblibopenjp2.a
-    liblibprotobuf.a
-    liblibwebp.a
-    libquirc.a
-    libtegra_hal.a
+    ${OpenCV_LIBS}
     ${CMAKE_CURRENT_BINARY_DIR}/libmotplugin.a
     -lnvinfer
     -lnvonnxparser
@@ -39,19 +29,7 @@ add_library(mot-static STATIC ${libsrcs})
 add_dependencies(mot-static motplugin)
 target_link_libraries(
     mot-static
-    libopencv_dnn.a
-    libopencv_video.a
-    libopencv_imgcodecs.a
-    libopencv_imgproc.a
-    libopencv_core.a
-    libade.a
-    libIlmImf.a
-    libittnotify.a
-    liblibopenjp2.a
-    liblibprotobuf.a
-    liblibwebp.a
-    libquirc.a
-    libtegra_hal.a
+    ${OpenCV_LIBS}
     ${CMAKE_CURRENT_BINARY_DIR}/libmotplugin.a
     -lnvinfer
     -lnvonnxparser

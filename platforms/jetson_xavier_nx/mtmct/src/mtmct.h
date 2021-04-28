@@ -43,16 +43,27 @@ struct tracklet
 };
 
 /**
- * @brief struct trajectory.
+ * @brief typedef camera.
+ */
+typedef unsigned char camera;
+
+/**
+ * @brief struct __trajectory.
  *  The local and global trajectory will share this structure.
  */
-struct trajectory
+template<typename Data=tracklet>
+struct __trajectory
 {
-    unsigned char cam;  // camera identity, cam=0 indicates that it's a global trajectory
+    camera cam;  // camera identity, cam=0 indicates that it's a global trajectory
     unsigned int id;    // target identity
     std::string cate;   // target category
-    std::list<tracklet> data;  // tracklets
+    std::list<Data> data;  // tracklets
 };
+
+/**
+ * @brief typedef trajectory.
+ */
+typedef __trajectory<> trajectory;
 
 /**
  * @brief class mtmct. This is a singleton class.
@@ -74,7 +85,7 @@ public:
      *  or equal to nullptr, all default parameters will be used.
      * @return Return ture if success, else return false.
      */
-    bool init(const std::vector<unsigned char> &cams, const char *config=nullptr);
+    bool init(const std::vector<camera> &cams, const char *config=nullptr);
     /**
      * @brief Add a camera to device list.
      * @warning The maximum number of support cameras is 255.
@@ -82,13 +93,13 @@ public:
      * @param cam The camera ID to be added.
      * @return Return ture if success, else return false.
      */
-    bool camadd(unsigned char cam);
+    bool camadd(camera cam);
     /**
      * @brief Delete a camera from device list.
      * @param cam The camera ID to be deleted.
      * @return Return ture if success, else return false.
      */
-    bool camdel(unsigned char cam);
+    bool camdel(camera cam);
     /**
      * @brief mtmct running.
      * @return Return ture if success, else return false.
@@ -107,9 +118,9 @@ public:
      *  If the parameter is missing or zero, no padding is assumed.
      * @return Return ture if success, else return false.
      */
-    bool impush(unsigned char cam, const unsigned char *data, short width, short height, size_t stride=0);
+    bool impush(camera cam, const unsigned char *data, short width, short height, size_t stride=0);
     /**
-     * @brief Pop local targets from trajectory queue.
+     * @brief Get local targets from trajectory queue.
      * @warning If the vector `local` is not empty, this function will update
      *  tracklet queue in fifo manner, it will be faster, the user must keep
      *  the vector alive all the time. If `local` is empty, this function will
@@ -118,9 +129,9 @@ public:
      * @param cam Camera ID for trajectory retrieving.
      * @return Return ture if success, else return false.
      */
-    bool tgtpop(std::vector<trajectory> &local, unsigned char cam);
+    bool tgget(std::vector<trajectory> &local, camera cam);
     /**
-     * @brief Pop global targets from trajectory queue.
+     * @brief Get global targets from trajectory queue.
      * @warning If the vector `global` is not empty, this function will update
      *  tracklet queue in fifo manner, it will be faster, the user must keep
      *  the vector alive all the time. If `global` is empty, this function will
@@ -128,7 +139,7 @@ public:
      * @param global Global trajectories.
      * @return Return ture if success, else return false.
      */
-    bool tgtpop(std::vector<trajectory> &global);
+    bool tgget(std::vector<trajectory> &global);
     /**
      * @brief mtmct stop running.
      * @return Return ture if success, else return false.
