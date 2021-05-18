@@ -81,19 +81,26 @@ struct MOT_Track
 typedef std::vector<MOT_Track> MOT_Result;
 
 /**
+ * @warning 确保一个线程只运行一个跟踪器实例!
+ */
+
+/**
  * @brief 加载多目标跟踪模型.
  * @param cfg_path 配置文件(.yaml)路径
+ * @param handle 模型句柄
  * @return  0, 模型加载成功
  *         -1, 模型加载失败
  */
-extern "C" MOT_API int load_mot_model(const char *cfg_path);
+extern "C" MOT_API int load_mot_model(const char *cfg_path, void **handle=nullptr);
 
 /**
  * @brief 卸载多目标跟踪模型.
+ * @param handle 模型句柄
+ * @warning 如果忽略handle, 必须确保该函数和load_mot_model在同一线程中.
  * @return  0, 卸载模型成功
  *         -1, 卸载模型失败
  */
-extern "C" MOT_API int unload_mot_model();
+extern "C" MOT_API int unload_mot_model(void *handle=nullptr);
 
 /**
  * @brief 执行多目标跟踪.
@@ -102,10 +109,12 @@ extern "C" MOT_API int unload_mot_model();
  * @param height 图像高度
  * @param stride 图像扫描行字节步长
  * @param result 多目标跟踪结果
+ * @param handle 模型句柄
+ * @warning 如果忽略handle, 必须确保该函数和load_mot_model在同一线程中.
  * @return    0, 执行多目标跟踪成功
  *          非0, 执行多目标跟踪失败
  */
-extern "C" MOT_API int forward_mot_model(const unsigned char *data, int width, int height, int stride, MOT_Result &result);
+extern "C" MOT_API int forward_mot_model(const unsigned char *data, int width, int height, int stride, MOT_Result &result, void *handle=nullptr);
 
 }   // namespace mot
 

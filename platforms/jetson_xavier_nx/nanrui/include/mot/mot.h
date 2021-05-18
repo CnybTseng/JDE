@@ -81,6 +81,10 @@ struct MOT_Track
 typedef std::vector<MOT_Track> MOT_Result;
 
 /**
+ * @note 以下三个接口没有传递模型句柄, 句柄根据线程号自动存储和获取, 所以必须确保同样一个MOT实例的以下三个接口的调用发生在同一线程中.
+ */
+
+/**
  * @brief 加载多目标跟踪模型.
  * @param cfg_path 配置文件(.yaml)路径
  * @return  0, 模型加载成功
@@ -106,6 +110,40 @@ extern "C" MOT_API int unload_mot_model();
  *          非0, 执行多目标跟踪失败
  */
 extern "C" MOT_API int forward_mot_model(const unsigned char *data, int width, int height, int stride, MOT_Result &result);
+
+/**
+ * @note 以下三个接口传递了模型句柄, 支持同样一个MOT实例的以下三个接口在相同或不同线程调用. `ts`后缀表示线程安全.
+ */
+
+/**
+ * @brief 加载多目标跟踪模型.
+ * @param cfg_path 配置文件(.yaml)路径
+ * @param handle 模型句柄指针
+ * @return  0, 模型加载成功
+ *         -1, 模型加载失败
+ */
+extern "C" MOT_API int load_mot_model_ts(const char *cfg_path, int **handle);
+
+/**
+ * @brief 卸载多目标跟踪模型.
+ * @param handle 模型句柄
+ * @return  0, 卸载模型成功
+ *         -1, 卸载模型失败
+ */
+extern "C" MOT_API int unload_mot_model_ts(int *handle);
+
+/**
+ * @brief 执行多目标跟踪.
+ * @param handle 模型句柄
+ * @param data   BGR888格式图像数据
+ * @param width  图像宽度
+ * @param height 图像高度
+ * @param stride 图像扫描行字节步长
+ * @param result 多目标跟踪结果
+ * @return    0, 执行多目标跟踪成功
+ *          非0, 执行多目标跟踪失败
+ */
+extern "C" MOT_API int forward_mot_model_ts(const int *handle, const unsigned char *data, int width, int height, int stride, MOT_Result &result);
 
 }   // namespace mot
 

@@ -1,3 +1,12 @@
+/**
+ * @file mot_alg.cpp
+ * @brief Multiple object tracking.
+ * @author Zhiwei Zeng
+ * @date 2021-5-14
+ * @version v1.0
+ * @copyright Copyright (c) 2004-2021 Chengdu Sihan Technology Co., Ltd
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,35 +26,33 @@
 #include "alg_camera_control.h"
 #include "mot_alg.h"
 #include "mot.h"
+#include "log.h"
 
-static std::map<std::thread::id, mot::MOT_Result> motres;
+static std::map<void *, mot::MOT_Result> motres;
 
-static bool flag = false;
-
-int load_model(int dev_id)
+static void *load_model(int dev_id)
 {
-    fprintf(stdout, "load_model\r\n");
-    // mot::load_mot_model("config.yaml");
-    return 0;
+    void *model_handle = nullptr;
+    mot::load_mot_model("config.yaml", &model_handle);
+    return model_handle;
 }
 
-void unload_model(int model_handle)
+static void unload_model(void *model_handle)
 {
-    mot::unload_mot_model();
+    mot::unload_mot_model(model_handle);
 }
 
-void on_message(const char *topic, const char *from, const char *to, void *payload, int payloadlen)
+static void on_message(const char *topic, const char *from, const char *to, void *payload, int payloadlen)
 {
-    fprintf(stderr, "topic: %s, from: %s, to: %s\n", topic, from, to);
+    fprintf(stdout, "topic: %s, from: %s, to: %s\n", topic, from, to);
 }
 
 int mot_alg_ability_init(void)
 {
-    fprintf(stderr, "mot_alg_ability_init\r\n");
+    pub_info("mot_alg_ability_init ...\n");
     int i = 0;
-    int model_handle = 0;
-    int *model_handle_addr = NULL;
-    struct alg_data_hosting_t data;
+    void *model_handle = nullptr;
+    void **model_handle_addr = nullptr;
     
     // Set image format as BGR.
     algsdk_set_image_type(IMAGE_BGR);
@@ -56,93 +63,74 @@ int mot_alg_ability_init(void)
     // Get usable processing units.
     ALGSDK_PROCESS_UNIT_LIST_ST *process_unit = algsdk_get_process_unit();
     if (process_unit && process_unit->unit_list) {
-        // Print all processing unit.
         for (i = 0; i < process_unit->unit_num; ++i) {
-            printf("%d id=%d percent=%d\r\n", i,
-                process_unit->unit_list[i].id,
+            pub_info("process unit %d: id=%d, percent=%d\n", i, process_unit->unit_list[i].id,
                 process_unit->unit_list[i].percent);
         }
         model_handle = load_model(process_unit->unit_list[0].id);
+        pub_info("load_model %p\n", model_handle);
         // Allocate public parameter space for storing model handle.
-        model_handle_addr = (int *)algsdk_get_public_param((char *)"model_handle", SHARE_IN_TASK, sizeof(model_handle));
-        if (model_handle_addr)
+        model_handle_addr = (void **)algsdk_get_public_param((char *)"model_handle", SHARE_IN_TASK, sizeof(model_handle));
+        if (model_handle_addr) {
             *model_handle_addr = model_handle;
+        } else {
+            pub_error("algsdk_get_public_param(model_handle) failed\n");
+            return -1;
+        }
     }
     
-    // Structure data.
-    data.type = 0;
-    data.title = NULL;
-    data.content = (void *)"[{\"Key\":\"nu\",\"Value\":1},{\"Key\":\"start\",\"Value\":{\"1\":\"1\",\"2\":{\"3\":2}}}]";
-    data.length = strlen("[{\"Key\":\"nu\",\"Value\":1},{\"Key\":\"start\",\"Value\":{\"1\":\"1\",\"2\":{\"3\":2}}}]");
-    
-    alg_data_hosting_put(&data);
-    
-    alg_msg_gateway_subscribe("topic", NULL, NULL);
+    alg_msg_gateway_subscribe("topic", nullptr, nullptr);
     alg_msg_gateway_callback_set(on_message);
-    
+    pub_info("mot_alg_ability_init done\n");
+ 
     return 0;
 }
 
 void mot_alg_ability_exit(void)
 {
-    int model_handle = 0;
-    int *model_handle_addr = NULL;
-    char content[1024];
-    struct alg_data_hosting_t data;
-
-    alg_data_hosting_get_value("nu", content, sizeof(content));
-    fprintf(stderr, "demo_alg_ability_exit: %s\r\n", content);
-    alg_data_hosting_get_value("start", content, sizeof(content));
-    fprintf(stderr, "demo_alg_ability_exit: %s\r\n", content);
-
-    data.type = 0;
-    data.title = NULL;
-    data.content = (void *)"[{\"Key\":\"nu\",\"Value\":2}]";
-    data.length = strlen("[{\"Key\":\"nu\",\"Value\":2}]");
-    int ret = alg_data_hosting_put(&data);
-    fprintf(stderr, "demo_alg_ability_exit:%d\r\n", ret);
-
-    sleep(5);
-    alg_data_hosting_get_value("nu", content, sizeof(content));
-    fprintf(stderr, "demo_alg_ability_exit: %s\r\n", content);
-    alg_data_hosting_get_value("start", content, sizeof(content));
-    fprintf(stderr, "demo_alg_ability_exit: %s\r\n", content);
+    pub_info("mot_alg_ability_exit ...\n");
+    void *model_handle = nullptr;
+    void **model_handle_addr = nullptr;
     
-    model_handle_addr = (int *)algsdk_get_public_param((char *)"model_handle", SHARE_IN_TASK, sizeof(model_handle));
-    if(model_handle_addr)
-    {
+    model_handle_addr = (void **)algsdk_get_public_param((char *)"model_handle", SHARE_IN_TASK, sizeof(model_handle));
+    if(model_handle_addr) {
         model_handle = *model_handle_addr;
+    } else {
+        pub_error("algsdk_get_public_param(model_handle) failed\n");
+        return;
     }
-    
+
+    pub_info("unload_model %p\n", model_handle);
     unload_model(model_handle);
+    pub_info("mot_alg_ability_exit done\n");
 }
 
 void *mot_alg_ability_data_fetch(void *input)
 {
     ALGSDK_SOURCE_HANDLE_ST *source_handle = algsdk_get_source_handle();
     if (!source_handle) { 
-        fprintf(stderr, "algsdk_get_source_handle failed\r\n");
-        return NULL;
+        pub_error("algsdk_get_source_handle failed\n");
+        return nullptr;
     }
     
     ALGSDK_IMAGE_ST *source_image = algsdk_get_source_image(source_handle->handle_group[0]);
     if (!source_image) {
-        fprintf(stderr, "algsdk_get_source_image failed\r\n");
-        return NULL;
+        pub_error("algsdk_get_source_image failed\n");
+        return nullptr;
     }
     
     ALGSDK_RULE_LIST_ST *rule = algsdk_get_source_rule(source_handle->handle_group[0]);
     
     char *url = algsdk_get_source_url(source_handle->handle_group[0]);
     if (!url) {
-        fprintf(stderr, "algsdk_get_source_url failed\r\n");
-        return NULL;
+        pub_error("algsdk_get_source_url failed\n");
+        return nullptr;
     }
     
     void **output = (void **)algsdk_malloc(sizeof(source_image) + sizeof(rule) + sizeof(char *));
     if (!output) {
-        fprintf(stderr, "algsdk_malloc failed\r\n");
-        return NULL;
+        pub_error("algsdk_malloc failed\n");
+        return nullptr;
     }
 
     output[0] = source_image;
@@ -153,19 +141,14 @@ void *mot_alg_ability_data_fetch(void *input)
 }
 
 void *mot_alg_ability_inference(void *input)
-{
-    if (flag == false) {
-        mot::load_mot_model("config.yaml");
-        flag = true;
-    }
-    
+{    
     // Parse image, rule, and url.
     void **real_input = (void **)input;
     ALGSDK_IMAGE_ST *source_image = (ALGSDK_IMAGE_ST *)real_input[0];
     ALGSDK_RULE_LIST_ST *rule = (ALGSDK_RULE_LIST_ST *)real_input[1];
     char *source_url = (char *)real_input[2];
-    
-    ALG_DATA_HOSTING_T *alarm_image = NULL;
+
+    ALG_DATA_HOSTING_T *alarm_image = nullptr;
     ALGSDK_POINT_ST point = {0};
     ALGSDK_OBJECT_BOX_ST obj_box = {0};
     ALGSDK_OBJ_LIST_ST obj_list = {0};
@@ -173,49 +156,44 @@ void *mot_alg_ability_inference(void *input)
     ALG_ALARM_IMAGE_DESC_ST alarm_push_image = {0};
 
     int ret = 0;
-    int model_handle = 0;
-    int *model_handle_addr = NULL;
-    // char *camera_handle = NULL;
-   
-    // Get public parameters
-    char *history = (char *)algsdk_get_public_param((char *)"history", SHARE_IN_ATOM, 100);
-    if (!history) {
-        fprintf(stderr, "algsdk_get_public_param failed\r\n");
-        return NULL;
+    void *model_handle = nullptr;
+    void **model_handle_addr = nullptr;
+    
+    model_handle_addr = (void **)algsdk_get_public_param((char *)"model_handle", SHARE_IN_TASK, sizeof(model_handle));
+    if (model_handle_addr) {
+        model_handle = *model_handle_addr;
+    } else {
+        pub_error("algsdk_get_public_param(model_handle) failed\n");
+        return nullptr;
     }
     
-    fprintf(stdout, "history=%s\r\n", history);
-    sprintf(history, "history time = %ld", time(NULL));
-    
-    model_handle_addr = (int *)algsdk_get_public_param((char *)"model_handle", SHARE_IN_TASK, sizeof(model_handle));
-    if (model_handle_addr)
-        model_handle = *model_handle_addr;
-    
     // Neural network inference.
-    std::thread::id tid = std::this_thread::get_id();
-    fprintf(stdout, "width %d, height %d, stride %d\r\n", source_image->width, source_image->height, source_image->image_data.step[0]);
-    mot::forward_mot_model((unsigned char *)source_image->image_data.data[0], source_image->width, source_image->height, source_image->image_data.step[0], motres[tid]); 
-    fprintf(stdout, "forward_mot_model done\r\n");
+    pub_debug("forward_mot_model %p\n", model_handle);
+    mot::forward_mot_model((unsigned char *)source_image->image_data.data[0], source_image->width,
+        source_image->height, source_image->image_data.step[0], motres[model_handle], model_handle); 
     
     // Push metadata.    
     std::vector<mot::MOT_Track>::iterator riter;
-    for (riter = motres[tid].begin(); riter != motres[tid].end(); riter++) {
+    for (riter = motres[model_handle].begin(); riter != motres[model_handle].end(); riter++) {
         std::deque<mot::MOT_Rect>::iterator iter;
         for (iter = riter->rects.begin(); iter != riter->rects.end(); iter++) {
             int l = static_cast<int>(iter->left);
             int t = static_cast<int>(iter->top);
             int r = static_cast<int>(iter->right);
             int b = static_cast<int>(iter->bottom);
-            if (l == 0 && t == 0 && r == 0 && b == 0)
+            float h = iter->bottom > iter->top ? iter->bottom - iter->top : 1e-5f;
+            float ar = (iter->right - iter->left) / h;   // aspect ratio
+            if ((l == 0 && t == 0 && r == 0 && b == 0) || ar > 1.f)
                 break;
             
-            algsdk_set_point(&point, 0, l, t, NULL);
+            // Points in clockwise order.
+            algsdk_set_point(&point, 0, l, t, nullptr);     // top left
             algsdk_add_point_to_obj_box(&obj_box, &point);
-            algsdk_set_point(&point, 1, r, t, NULL);
+            algsdk_set_point(&point, 1, r, t, nullptr);     // top right
             algsdk_add_point_to_obj_box(&obj_box, &point);
-            algsdk_set_point(&point, 2, r, b, NULL);
+            algsdk_set_point(&point, 2, r, b, nullptr);     // bottom right
             algsdk_add_point_to_obj_box(&obj_box, &point);
-            algsdk_set_point(&point, 3, l, b, NULL);
+            algsdk_set_point(&point, 3, l, b, nullptr);     // bottom left
             algsdk_add_point_to_obj_box(&obj_box, &point);
             
             char desc[128] = {0};
@@ -228,61 +206,48 @@ void *mot_alg_ability_inference(void *input)
     
     algsdk_push_metadata((char *)"mot metadata", &obj_list, source_url, source_image->pts);
     
-    // Publish task event.
+    // Alarm handle.
     if (algsdk_alarm_time_check() == 0) {
-        // Overlap OSD on image.
+        // Overlap OSD on alarm image.
         char name[128] = {0};
         sprintf(name, "%lld.jpg", source_image->pts);
         alarm_image = alg_osd_get_osd_image(name, source_image, &obj_list);
         if (!alarm_image) {
-            fprintf(stderr, "alg_osd_get_osd_image failed\r\n");
+            pub_error("alg_osd_get_osd_image failed\n");
             goto EXIT_1;
         }
         
         // Push alarm event.
         snprintf(alarm_push.desc, sizeof(alarm_push.desc), "%s", "mot alarm");
         alarm_push.image_num = 1;
-        alarm_push.image_list = &alarm_push_image;
-        
+        alarm_push.image_list = &alarm_push_image;        
         snprintf(alarm_push_image.name, sizeof(alarm_push_image.name), "%s", name);
         alarm_push_image.width = source_image->width;
         alarm_push_image.height = source_image->height;
         alarm_push_image.size = alarm_image->length;
-        
+
         ret = algsdk_alarm_event_push(&alarm_push);
         if (1 == ret) {
-            fprintf(stderr, "algsdk_alarm_event_push failed\r\n");
+            pub_error("algsdk_alarm_event_push failed\n");
             goto EXIT_1;
         }
         
-        // Alarm image trusteeship.
-        fprintf(stdout, "before alg_data_hosting_put, alarm_image type = %d, title = %s, length = %lu\r\n",
+        // Alarm image hosting.
+        pub_info("alarm_image type = %d, title = %s, length = %lu\n",
             alarm_image->type, alarm_image->title, alarm_image->length);
         ret = alg_data_hosting_put(alarm_image);
-        fprintf(stdout, "alg_data_hosting_put ret %d\r\n", ret);
     }
-    
-    alg_msg_gateway_publish((char *)"topic", history, NULL, history, strlen(history) + 1);
-    
-    // Camera control.
-    // camera_handle = alg_camera_control_get_help(source_url);
-    // if (camera_handle) {
-    //     ret = alg_camera_control_handler(camera_handle, 0, time(NULL) % 10, 1, 1);
-    //     fprintf(stdout, "alg_camera_control_handler return %d\r\n", ret);
-    //     alg_camera_control_release_handle(camera_handle);
-    //     camera_handle = NULL;
-    // }
 
 EXIT_1:   
-    // Release memories for image, rule, and url.
+    // Release image, rule, and url.
     algsdk_release_source_image(source_image);
     alg_osd_release_osd_image(alarm_image);
     algsdk_release_source_rule(rule);
     if (source_url) {
         free(source_url);
-        source_url = NULL;
+        source_url = nullptr;
     }
     algsdk_free_obj_list(&obj_list);
     
-    return NULL;
+    return nullptr;
 }

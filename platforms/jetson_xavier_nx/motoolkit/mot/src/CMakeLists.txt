@@ -19,7 +19,7 @@ target_link_libraries(
     -lz
 )
 
-set_target_properties(mot PROPERTIES PUBLIC_HEADER "mot.h;config.h")
+set_target_properties(mot PROPERTIES PUBLIC_HEADER "mot.h;config.h;SH_ImageAlgLogSystem.h")
 install(TARGETS mot
     LIBRARY DESTINATION lib
     PUBLIC_HEADER DESTINATION include

@@ -86,7 +86,7 @@ public:
 static std::map<std::thread::id, std::shared_ptr<MOT>> models;
 static std::mutex mtx;
 
-int load_mot_model(const char *cfg_path)
+int load_mot_model(const char *cfg_path, void **handle)
 {
     mtx.lock();
     std::thread::id tid = std::this_thread::get_id();
@@ -145,14 +145,23 @@ int load_mot_model(const char *cfg_path)
     model.nmsdet.reserve(nvinfer1::jdec::maxNumOutputBox);
     
     mtx.unlock();
+    if (handle)
+        *handle = static_cast<void *>(&models[tid]);
     
     return 0;
 }
 
-int unload_mot_model()
+int unload_mot_model(void *handle)
 {
-    std::thread::id tid = std::this_thread::get_id();
-    MOT& model = *models[tid].get();
+    std::shared_ptr<MOT> *spmot;
+    if (handle) {
+        spmot = static_cast<std::shared_ptr<MOT> *>(handle);
+    } else {
+        std::thread::id tid = std::this_thread::get_id();
+        spmot = &models[tid];
+    }
+
+    MOT& model = *spmot->get();
 #if (USE_DECODERV2 && (!INTEGRATES_DECODER))    
     cudaFree(model.dets_gpu);
 #endif    
@@ -176,10 +185,17 @@ int unload_mot_model()
     return 0;
 }
 
-int forward_mot_model(const unsigned char *data, int width, int height, int stride, MOT_Result &result)
+int forward_mot_model(const unsigned char *data, int width, int height, int stride, MOT_Result &result, void *handle)
 {
-    std::thread::id tid = std::this_thread::get_id();
-    MOT& model = *models[tid].get();
+    std::shared_ptr<MOT> *spmot;
+    if (handle) {
+        spmot = static_cast<std::shared_ptr<MOT> *>(handle);
+    } else {
+        std::thread::id tid = std::this_thread::get_id();
+        spmot = &models[tid];
+    }
+
+    MOT& model = *spmot->get();
 #if PROFILE
     auto start_prep = std::chrono::high_resolution_clock::now();
 #endif

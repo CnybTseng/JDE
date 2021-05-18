@@ -54,3 +54,7 @@ $(OBJS):%.o:%.cpp
 clean:
 	@rm -f $(TARGET)
 	@rm -f $(OBJS)
+
+install:
+	@cp mot ./docker
+	@cp ../../motoolkit/mot/build/install/bin/jde.trt ./docker
